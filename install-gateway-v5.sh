@@ -197,9 +197,12 @@ systemctl stop "$SERVICE_NAME" 2>/dev/null || true
 info "下载 iWAN Gateway v5 轻量版…"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
-curl -fL --retry 3 --connect-timeout 15 \
-  "$BASE_URL/gateway-v5.tar.xz.b64" \
-  -o "$TMP_DIR/gateway-v5.tar.xz.b64"
+for part in 00 01 02 03 04 05 06 07; do
+  curl -fL --retry 3 --connect-timeout 15 \
+    "$BASE_URL/gateway-v5.tar.xz.b64.part${part}" \
+    -o "$TMP_DIR/part${part}"
+done
+cat "$TMP_DIR"/part* > "$TMP_DIR/gateway-v5.tar.xz.b64"
 base64 -d "$TMP_DIR/gateway-v5.tar.xz.b64" > "$TMP_DIR/gateway-v5.tar.xz"
 echo "d876d94f3df0f36f54a305b82edbb9ae8e71ea981fe69edef1f60b04b208f68b  $TMP_DIR/gateway-v5.tar.xz" | sha256sum -c - >/dev/null || die "面板安装包校验失败。"
 tar -xJf "$TMP_DIR/gateway-v5.tar.xz" -C "$TMP_DIR"
