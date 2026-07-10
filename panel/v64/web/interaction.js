@@ -110,11 +110,11 @@
 
   function routeHelp(key) {
     return {
-      netflix: 'Netflix 域名规则',
-      ai: 'ChatGPT、Claude、Gemini',
-      youtube: 'YouTube 与视频域名',
-      telegram: 'Telegram 域名与 IP 段',
-      default: '未命中以上规则的流量',
+      netflix: 'Netflix 独立出口',
+      ai: 'ChatGPT、Claude、Gemini 独立出口',
+      youtube: 'YouTube 独立出口',
+      telegram: 'Telegram 独立出口',
+      default: '未命中以上规则的独立默认出口',
     }[key] || '';
   }
 
@@ -141,22 +141,9 @@
     const tools = document.createElement('div');
     tools.id = 'routeTools';
     tools.className = 'route-tools';
-    tools.innerHTML = `
-      <button type="button" class="btn soft small" id="routeAiSame">AI 跟随 Netflix</button>
-      <button type="button" class="btn ghost small" id="routeAllDefault">全部跟随默认</button>
-      <button type="button" class="btn ghost small" id="routeReload">放弃未保存修改</button>`;
+    tools.innerHTML = '<button type="button" class="btn ghost small" id="routeReload">放弃未保存修改</button>';
     form.parentElement.insertBefore(tools, form);
     form.addEventListener('change', refreshRouteCards);
-    document.querySelector('#routeAiSame').onclick = () => {
-      const netflix = document.querySelector('[data-route="netflix"]');
-      const ai = document.querySelector('[data-route="ai"]');
-      if (netflix && ai) { ai.value = netflix.value; setDirty(); refreshRouteCards(); }
-    };
-    document.querySelector('#routeAllDefault').onclick = () => {
-      const value = document.querySelector('[data-route="default"]')?.value || '';
-      document.querySelectorAll('[data-route]').forEach(select => { if (select.dataset.route !== 'default') select.value = value; });
-      setDirty(); refreshRouteCards();
-    };
     document.querySelector('#routeReload').onclick = async () => {
       if (!state.dirty || confirm('放弃当前未保存修改并重新读取服务器配置？')) {
         await loadConfig();
@@ -302,7 +289,6 @@
     ensureApplyState();
     enhanceRouting();
     installImportUi();
-    const originalOpenImport = document.querySelector('#openImportBtn')?.onclick;
     if (document.querySelector('#openImportBtn')) {
       document.querySelector('#openImportBtn').onclick = () => {
         asyncUi.preview = [];
