@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""iWAN Gateway v6.4.1: silent debounced autosave for nodes and routing."""
+"""iWAN Gateway v6.4.2: silent debounced autosave for nodes and routing."""
 from __future__ import annotations
 
 import argparse
@@ -14,7 +14,7 @@ moscore = routingcore.moscore
 authcore = routingcore.authcore
 interactioncore = routingcore.interactioncore
 statuscore = routingcore.statuscore
-VERSION = "6.4.1"
+VERSION = "6.4.2"
 for module in (core, moscore, authcore, interactioncore, statuscore, routingcore):
     module.VERSION = VERSION
 
@@ -45,7 +45,9 @@ class Handler(routingcore.Handler):
 
 def self_test() -> None:
     routingcore.self_test()
-    assert b"autosave.js" in page_html()
+    html = page_html()
+    assert b"refreshfix.js" in html
+    assert b"autosave.js" in html
     print(json.dumps({"ok": True, "version": VERSION, "autosave": ["nodes", "routing"]}))
 
 
