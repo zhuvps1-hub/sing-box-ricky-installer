@@ -40,13 +40,14 @@ jobs:
           bash -n install-gateway.sh
       - name: Python syntax and unit tests
         run: |
-          python -m py_compile panel/app.py panel/v62/app.py
+          python -m py_compile panel/app.py panel/v62/app.py panel/v63/app.py
           cd panel
           python -m unittest discover -s tests -v
       - name: JavaScript syntax
         run: |
           node --check panel/web/app.js
           node --check panel/v62/web/app.js
+          node --check panel/v63/web/remember.js
       - name: Verify immutable release manifest
         run: |
           python - <<'PY'
