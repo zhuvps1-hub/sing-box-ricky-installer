@@ -16,8 +16,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/zhuvps1-hub/sing-box-ricky-i
 - 安装官方 mosdns v5，并创建 systemd 服务
 - 安装 iWAN Gateway Web 面板
 - 读取并保留现有 iWAN、落地节点和密码
-- 从旧版目录迁移登录账号、流量历史和备份
-- 去除 F7010U 品牌名称，统一显示为 `iWAN Gateway`
+- 自动迁移旧版登录账号、流量历史和备份
 - 创建配置备份并执行健康检查
 
 默认访问地址：
