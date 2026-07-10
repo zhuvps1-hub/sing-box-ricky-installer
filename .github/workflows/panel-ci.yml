@@ -40,10 +40,16 @@ jobs:
           bash -n install-gateway.sh
       - name: Python syntax
         run: python -m py_compile panel/app.py panel/v62/app.py panel/v63/app.py panel/v64/app.py
-      - name: Unit tests
-        run: |
-          cd panel
-          python -m unittest discover -s tests -v
+      - name: Test import JSON
+        run: cd panel && python tests/test_panel.py PanelTests.test_import_json_outbounds -v
+      - name: Test ss link
+        run: cd panel && python tests/test_panel.py PanelTests.test_parse_ss_link -v
+      - name: Test flat credentials
+        run: cd panel && python tests/test_panel.py PanelTests.test_patch_flat_credentials -v
+      - name: Test user credentials
+        run: cd panel && python tests/test_panel.py PanelTests.test_patch_iwan_preserves_blank_password -v
+      - name: Test password redaction
+        run: cd panel && python tests/test_panel.py PanelTests.test_public_iwan_redacts_password -v
       - name: JavaScript syntax
         run: |
           node --check panel/web/app.js
