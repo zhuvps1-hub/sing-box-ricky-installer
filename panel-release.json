@@ -1,11 +1,11 @@
 {
   "version": "6.5.0",
-  "ref": "3b8e800b64019696faf1e1bdf622ff38ec0fc191",
+  "ref": "92b44fef63d9247e68dc0418c599369e1cb4fe62",
   "files": [
     {
       "source": "panel/v67/app.py",
       "target": "app.py",
-      "git_blob": "048e529c5795c7dfc2d40768de6bb7917b6693d8",
+      "git_blob": "6d44dcba11ba97a6a27a4dafdff7ed3a186deeee",
       "mode": "0755"
     },
     {
@@ -107,7 +107,7 @@
     {
       "source": "panel/v67/web/autosave.js",
       "target": "web/autosave.js",
-      "git_blob": "2c481084f95fc0d6298cc655616c9f8281fa4855",
+      "git_blob": "18b52790f359e4ab45b05bb55b1b4fea9c16abe1",
       "mode": "0644"
     }
   ]
