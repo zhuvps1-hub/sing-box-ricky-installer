@@ -34,6 +34,11 @@
     try { refreshRouteCards(); } catch {}
   }
 
+  async function readAutosaveStatus() {
+    const data = await api('/api/autosave-status', {}, 4000);
+    return data.autosave || {};
+  }
+
   async function watchStatus() {
     if (watching || !lastSubmitted) return;
     watching = true;
@@ -41,8 +46,7 @@
       while (lastSubmitted) {
         let status = null;
         try {
-          const data = await api('/api/autosave-status', {}, 4000);
-          status = data.autosave || {};
+          status = await readAutosaveStatus();
         } catch {
           await sleep(1800);
           continue;
@@ -117,6 +121,71 @@
     window.setTimeout(() => schedule(delay), 0);
   }
 
+  async function waitAutosaveIdle(maxMs = 30000) {
+    const started = Date.now();
+    while (Date.now() - started < maxMs) {
+      if (!sending && !timer) {
+        try {
+          const status = await readAutosaveStatus();
+          if (!['queued', 'running'].includes(status.state)) return true;
+        } catch {}
+      }
+      await sleep(600);
+    }
+    return false;
+  }
+
+  function installPageUi() {
+    document.documentElement.classList.add('silent-autosave');
+    document.querySelector('#routeTools')?.remove();
+    document.querySelector('#applyState')?.remove();
+
+    const quickHint = document.querySelector('#page-dashboard .action-grid')?.closest('.panel-card')?.querySelector('.panel-head p');
+    if (quickHint) quickHint.textContent = '节点和分流自动保存；iWAN 与 DNS 在各自页面确认';
+    const nodeHint = document.querySelector('#page-nodes .panel-head p');
+    if (nodeHint) nodeHint.textContent = '新增、编辑、删除或导入后自动保存';
+    const routeNotice = document.querySelector('#page-routing .notice');
+    if (routeNotice) routeNotice.textContent = '修改后自动校验并在后台应用；失败会自动回滚并提示。';
+
+    const iwanPage = document.querySelector('#page-iwan .panel-card');
+    const iwanForm = document.querySelector('#iwanForm');
+    if (iwanPage && iwanForm && !document.querySelector('#iwanSaveBtn')) {
+      const actions = document.createElement('div');
+      actions.className = 'dialog-actions iwan-save-actions';
+      actions.innerHTML = '<button type="button" id="iwanSaveBtn" class="btn primary">保存并重连</button>';
+      iwanForm.insertAdjacentElement('afterend', actions);
+      const notice = iwanPage.querySelector('.notice');
+      if (notice) notice.textContent = '密码不会在页面回显。留空表示保留当前密码；点击“保存并重连”后自动校验并重新连接。';
+      document.querySelector('#iwanSaveBtn').onclick = async event => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        button.textContent = '准备保存…';
+        const idle = await waitAutosaveIdle();
+        if (!idle) {
+          toast('节点或分流仍在后台应用，请稍后重试', true);
+          button.disabled = false;
+          button.textContent = '保存并重连';
+          return;
+        }
+        const hiddenSave = document.querySelector('#saveBtn');
+        if (!state.dirty || !hiddenSave || hiddenSave.disabled) {
+          toast('iWAN 配置没有变化');
+          button.disabled = false;
+          button.textContent = '保存并重连';
+          return;
+        }
+        hiddenSave.click();
+        const reset = window.setInterval(() => {
+          if (!state.saving) {
+            window.clearInterval(reset);
+            button.disabled = false;
+            button.textContent = '保存并重连';
+          }
+        }, 400);
+      };
+    }
+  }
+
   document.addEventListener('change', event => {
     if (event.target instanceof Element && event.target.matches('[data-route]')) {
       schedule(900);
@@ -141,7 +210,5 @@
     }
   }, true);
 
-  document.documentElement.classList.add('silent-autosave');
-  document.querySelector('#routeTools')?.remove();
-  document.querySelector('#applyState')?.remove();
+  installPageUi();
 })();
