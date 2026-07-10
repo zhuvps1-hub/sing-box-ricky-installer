@@ -65,6 +65,11 @@ def managed_rules(mappings: dict[str, str]) -> list[dict[str, Any]]:
 core.managed_rules = managed_rules
 
 
+def page_html() -> bytes:
+    """Expose the inherited page renderer to extension layers."""
+    return statuscore.page_html()
+
+
 class Handler(statuscore.Handler):
     pass
 
@@ -85,6 +90,7 @@ def self_test() -> None:
     assert rules[4]["outbound"] == "hk" and "domain_suffix" in rules[4] and "ip_cidr" not in rules[4]
     assert rules[5]["outbound"] == "hk" and "ip_cidr" in rules[5] and "domain_suffix" not in rules[5]
     assert managed_rules({}) == []
+    assert b"refreshfix.js" in page_html()
     print(json.dumps({"ok": True, "version": VERSION, "routing": "sniff-first"}))
 
 
