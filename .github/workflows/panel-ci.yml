@@ -1,0 +1,51 @@
+name: panel-ci
+
+on:
+  push:
+    paths:
+      - "panel/**"
+      - "panel-release.json"
+      - "install-panel-v6.sh"
+      - "install-web.sh"
+      - ".github/workflows/panel-ci.yml"
+  pull_request:
+    paths:
+      - "panel/**"
+      - "panel-release.json"
+      - "install-panel-v6.sh"
+      - "install-web.sh"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Shell syntax
+        run: |
+          bash -n install-panel-v6.sh
+          bash -n install-web.sh
+      - name: Python syntax and unit tests
+        run: |
+          python -m py_compile panel/app.py
+          cd panel
+          python -m unittest discover -s tests -v
+      - name: JavaScript syntax
+        run: node --check panel/web/app.js
+      - name: Verify immutable release manifest
+        run: |
+          python - <<'PY'
+          import hashlib, json, re, subprocess
+          manifest=json.load(open('panel-release.json',encoding='utf-8'))
+          ref=manifest['ref']
+          assert re.fullmatch(r'[0-9a-f]{40}',ref)
+          for item in manifest['files']:
+              data=subprocess.check_output(['git','show',f"{ref}:{item['source']}"])
+              actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+              assert actual == item['git_blob'], (item['source'], actual, item['git_blob'])
+          print('manifest verified')
+          PY
