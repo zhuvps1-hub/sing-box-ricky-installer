@@ -40,11 +40,13 @@ jobs:
           bash -n install-gateway.sh
       - name: Python syntax and unit tests
         run: |
-          python -m py_compile panel/app.py
+          python -m py_compile panel/app.py panel/v62/app.py
           cd panel
           python -m unittest discover -s tests -v
       - name: JavaScript syntax
-        run: node --check panel/web/app.js
+        run: |
+          node --check panel/web/app.js
+          node --check panel/v62/web/app.js
       - name: Verify immutable release manifest
         run: |
           python - <<'PY'
@@ -57,6 +59,28 @@ jobs:
               actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
               assert actual == item['git_blob'], (item['source'], actual, item['git_blob'])
           print('manifest verified')
+          PY
+      - name: Assemble and self-test stable release
+        run: |
+          python - <<'PY'
+          import json, os, pathlib, subprocess, tempfile
+          manifest=json.load(open('panel-release.json',encoding='utf-8'))
+          with tempfile.TemporaryDirectory() as td:
+              root=pathlib.Path(td,'release'); root.mkdir()
+              for item in manifest['files']:
+                  data=subprocess.check_output(['git','show',f"{manifest['ref']}:{item['source']}"])
+                  target=root/item['target']; target.parent.mkdir(parents=True,exist_ok=True); target.write_bytes(data); target.chmod(int(item['mode'],8))
+              env=os.environ.copy()
+              env.update({
+                  'IWAN_PANEL_CONFIG_DIR':str(pathlib.Path(td,'config')),
+                  'IWAN_PANEL_DATA_DIR':str(pathlib.Path(td,'data')),
+                  'SINGBOX_BACKUP_DIR':str(pathlib.Path(td,'singbox-backups')),
+                  'MOSDNS_BACKUP_DIR':str(pathlib.Path(td,'mosdns-backups')),
+                  'SINGBOX_CONFIG':str(pathlib.Path(td,'sing-box.json')),
+                  'MOSDNS_CONFIG':str(pathlib.Path(td,'mosdns','config.yaml')),
+              })
+              subprocess.check_call(['python',str(root/'app.py'),'--self-test'],env=env)
+          print('release self-test passed')
           PY
       - name: Simulate GitHub API Base64 formatting
         run: |
