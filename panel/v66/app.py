@@ -21,9 +21,9 @@ for module in (core, moscore, authcore, interactioncore, statuscore):
 def managed_rules(mappings: dict[str, str]) -> list[dict[str, Any]]:
     """Generate effective transparent-proxy rules.
 
-    iWAN usually forwards connections with an IP destination.  Domain suffix
+    iWAN usually forwards connections with an IP destination. Domain suffix
     rules cannot match those connections until sing-box sniffs HTTP Host, TLS
-    SNI or QUIC Server Name.  The sniff action is non-final, so routing
+    SNI or QUIC Server Name. The sniff action is non-final, so routing
     continues into the independent category rules below.
     """
     rules: list[dict[str, Any]] = []
@@ -32,20 +32,32 @@ def managed_rules(mappings: dict[str, str]) -> list[dict[str, Any]]:
         rules.append({
             "action": "sniff",
             "sniffer": ["http", "tls", "quic"],
-            "timeout": "1s",
         })
-    for category in ("netflix", "ai", "youtube", "telegram"):
+
+    for category in ("netflix", "ai", "youtube"):
         outbound = str(mappings.get(category, "")).strip()
         if not outbound:
             continue
-        rule: dict[str, Any] = {
+        rules.append({
             "domain_suffix": core.CATEGORY_DOMAINS[category],
             "action": "route",
             "outbound": outbound,
-        }
-        if category == "telegram":
-            rule["ip_cidr"] = core.TELEGRAM_CIDRS
-        rules.append(rule)
+        })
+
+    telegram_outbound = str(mappings.get("telegram", "")).strip()
+    if telegram_outbound:
+        # Different fields in one sing-box rule are AND conditions. Keep domain
+        # and IP matching separate so either form can route Telegram traffic.
+        rules.append({
+            "domain_suffix": core.CATEGORY_DOMAINS["telegram"],
+            "action": "route",
+            "outbound": telegram_outbound,
+        })
+        rules.append({
+            "ip_cidr": core.TELEGRAM_CIDRS,
+            "action": "route",
+            "outbound": telegram_outbound,
+        })
     return rules
 
 
@@ -70,7 +82,8 @@ def self_test() -> None:
     assert rules[1]["action"] == "route" and rules[1]["outbound"] == "sg"
     assert rules[2]["outbound"] == "ai-node"
     assert rules[3]["outbound"] == "jp"
-    assert rules[4]["outbound"] == "hk" and rules[4]["ip_cidr"]
+    assert rules[4]["outbound"] == "hk" and "domain_suffix" in rules[4] and "ip_cidr" not in rules[4]
+    assert rules[5]["outbound"] == "hk" and "ip_cidr" in rules[5] and "domain_suffix" not in rules[5]
     assert managed_rules({}) == []
     print(json.dumps({"ok": True, "version": VERSION, "routing": "sniff-first"}))
 
