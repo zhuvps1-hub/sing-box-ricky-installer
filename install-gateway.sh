@@ -101,6 +101,18 @@ mkdir -p "$APP_DIR"
 cp -a "$TMP_DIR/gateway/." "$APP_DIR/"
 chmod 755 "$APP_DIR/app.py" "$APP_DIR/core.py"
 
+# 避免 Python HTTPServer 在 systemd SIGTERM 处理器中自锁。
+APP_FILE="$APP_DIR/app.py" python3 - <<'PY_PATCH'
+import os
+from pathlib import Path
+p = Path(os.environ["APP_FILE"])
+s = p.read_text(encoding="utf-8")
+if "import threading\n" not in s:
+    s = s.replace("import signal\n", "import signal\nimport threading\n", 1)
+s = s.replace("        server.shutdown()\n", "        threading.Thread(target=server.shutdown, daemon=True).start()\n", 1)
+p.write_text(s, encoding="utf-8")
+PY_PATCH
+
 python3 -m py_compile "$APP_DIR/app.py" "$APP_DIR/core.py" || die "Python 语法检查失败。"
 
 if (( AUTH_EXISTS == 0 )); then
