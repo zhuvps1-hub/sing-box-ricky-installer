@@ -1,29 +1,29 @@
 {
-  "version": "6.0.0",
-  "ref": "c0926a508bce52d95a50d2904df59d3ab221a839",
+  "version": "6.1.0",
+  "ref": "95add0855e1196a140fbe0e28dda7dbb0adc22ee",
   "files": [
     {
       "source": "panel/app.py",
       "target": "app.py",
-      "git_blob": "926031c72ebc5dbc3a2a01115a70ef7a54f9fbae",
+      "git_blob": "f197dffc9456775a44a0319d233f8cf8796e6dd6",
       "mode": "0755"
     },
     {
       "source": "panel/web/index.html",
       "target": "web/index.html",
-      "git_blob": "6ce3f49d24e1d9abd6b07796af38282107ca42d9",
+      "git_blob": "d70015367dec3c03a09c732fcae8956e5c5eb081",
       "mode": "0644"
     },
     {
       "source": "panel/web/app.css",
       "target": "web/app.css",
-      "git_blob": "2cb3a8f61a58aa14f84db92c4073f7f254636752",
+      "git_blob": "98ca0fe98d39d479f40b22d5d1252b1f3c0fe9fb",
       "mode": "0644"
     },
     {
       "source": "panel/web/app.js",
       "target": "web/app.js",
-      "git_blob": "7ba7d7c1f6e4055bee07fd26a1281f24c3f9b217",
+      "git_blob": "0c9c6f699d2563aba5c2ebafea4e19de171e13e6",
       "mode": "0644"
     }
   ]
