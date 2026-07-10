@@ -1,38 +1,406 @@
 'use strict';
-const $=(s,r=document)=>r.querySelector(s);const $$=(s,r=document)=>[...r.querySelectorAll(s)];
-const state={csrf:'',config:null,nodes:[],deleted:new Set(),dirty:false,latency:{}};
-const pageMeta={dashboard:['仪表盘','实时采样现有服务，不写死任何节点'],nodes:['节点管理','自由新增、导入和测速'],routing:['分流规则','每类业务可选择任意已启用节点'],iwan:['iWAN 配置','读取当前 inbound，按需修改'],logs:['日志与网络','重数据仅在打开本页时读取'],settings:['系统设置','轻量架构与安全说明']};
-function toast(msg,bad=false){const el=$('#toast');el.textContent=msg;el.style.background=bad?'#c93e4a':'';el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),3200)}
-async function api(path,opts={}){opts.headers={...(opts.headers||{}),'Content-Type':'application/json'};if(opts.method&&opts.method!=='GET')opts.headers['X-CSRF-Token']=state.csrf;const r=await fetch(path,opts);let d={};try{d=await r.json()}catch{}if(r.status===401){showLogin();throw new Error('登录已过期')}if(!r.ok||d.ok===false)throw new Error(d.error||d.message||`HTTP ${r.status}`);return d}
-function setTheme(v){document.documentElement.dataset.theme=v;localStorage.setItem('iwan-theme',v);$('#themeSelect').value=v}
-function formatBytes(n,rate=false){n=Number(n)||0;const u=['B','KB','MB','GB','TB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return `${n>=100||i===0?n.toFixed(0):n.toFixed(2)} ${u[i]}${rate?'/s':''}`}
-function fmtUptime(s){s=Number(s)||0;const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);return d?`${d}天 ${h}时`:`${h}时 ${m}分`}
-function setDirty(v=true){state.dirty=v;$('#saveBtn').classList.toggle('hidden',!v);$('#saveBtn').textContent=v?'保存并应用':'已保存'}
-function showLogin(){$('#app').classList.add('hidden');$('#login').classList.remove('hidden')}
-function showApp(){$('#login').classList.add('hidden');$('#app').classList.remove('hidden')}
-function servicePill(id,on){const el=$(id);el.classList.toggle('online',!!on);el.classList.toggle('offline',!on);el.textContent=el.textContent.split(' ')[0]+(on?' · 在线':' · 离线')}
-function routeName(k){return{netflix:'Netflix',ai:'ChatGPT / Claude',youtube:'YouTube',telegram:'Telegram',default:'其他流量'}[k]||k}
-function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-function renderRouteSummary(c){const box=$('#routeSummary');const items=[['国内网站','direct'],['Netflix',c.mappings.netflix||'未识别'],['ChatGPT / Claude',c.mappings.ai||'未识别'],['YouTube',c.mappings.youtube||'未识别'],['Telegram',c.mappings.telegram||'未识别'],['其他流量',c.default||'未识别']];box.innerHTML=items.map(([a,b])=>`<div class="route-chip"><span>${escapeHtml(a)}</span><strong>${escapeHtml(b)}</strong></div>`).join('')}
-function drawChart(history){const c=$('#trafficChart'),ctx=c.getContext('2d'),dpr=devicePixelRatio||1,w=c.clientWidth||600,h=c.clientHeight||220;c.width=w*dpr;c.height=h*dpr;ctx.scale(dpr,dpr);ctx.clearRect(0,0,w,h);ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--line');ctx.lineWidth=1;for(let i=1;i<4;i++){ctx.beginPath();ctx.moveTo(0,h*i/4);ctx.lineTo(w,h*i/4);ctx.stroke()}const vals=(history||[]).slice(-80),max=Math.max(1,...vals.flatMap(x=>[x.up,x.down]));function line(key,color){ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();vals.forEach((x,i)=>{const px=i/Math.max(1,vals.length-1)*w,py=h-(x[key]/max)*(h-10)-5;i?ctx.lineTo(px,py):ctx.moveTo(px,py)});ctx.stroke()}line('down','#2f8cf5');line('up','#17b67a')}
-async function loadDashboard(){try{const d=await api('/api/dashboard');$('#versionText').textContent='v'+d.version;servicePill('#pillIwan',!!d.config.iwan&&d.services['sing-box']);servicePill('#pillSing',d.services['sing-box']);servicePill('#pillMos',d.services.mosdns);$('#iwanState').textContent=d.config.iwan?'已识别':'未识别';$('#iwanPort').textContent=d.config.iwan.listen_port||'—';$('#iwanPool').textContent='地址池 '+(d.config.iwan.address_pool||d.config.iwan.address||'—');$('#singState').textContent=d.services['sing-box']?'运行中':'已停止';$('#mosState').textContent=d.services.mosdns?'运行中':'已停止';$('#defaultNode').textContent=d.config.default||'未识别';$('#nodeCount').textContent=`${d.config.nodes.length} 个节点`;$('#cpuText').textContent=d.system.cpu+'%';$('#memText').textContent=d.system.memory+'%';$('#cpuBar').style.width=d.system.cpu+'%';$('#memBar').style.width=d.system.memory+'%';$('#uptimeText').textContent=fmtUptime(d.system.uptime);$('#uploadText').textContent=formatBytes(d.system.upload_bps,true);$('#downloadText').textContent=formatBytes(d.system.download_bps,true);$('#totalText').textContent=formatBytes(d.system.total_bytes);renderRouteSummary(d.config);drawChart(d.history)}catch(e){toast(e.message,true)}}
-async function loadConfig(){const c=await api('/api/config');state.config=c;state.nodes=(c.nodes||[]).map(n=>({...n,password:''}));state.deleted.clear();renderNodes();renderRouteForm();renderIwanForm();renderRouteSummary(c)}
-function nodeUses(tag){if(!state.config)return'';const a=[];for(const[k,v]of Object.entries(state.config.mappings||{}))if(v===tag)a.push(routeName(k));if(state.config.default===tag)a.push('其他流量');return a.join('、')||'未分配'}
-function renderNodes(){const box=$('#nodesList');if(!state.nodes.length){box.innerHTML='<div class="hint">尚未识别 Shadowsocks 节点，可新增或导入。</div>';return}box.innerHTML=state.nodes.map((n,i)=>{const l=state.latency[n.tag];return`<div class="node-card"><strong>${escapeHtml(n.tag)}</strong><div class="node-meta">${escapeHtml(n.server)}:${escapeHtml(n.server_port)}</div><div class="latency ${l?.ok?'good':l?'bad':''}">${l?(l.ok?l.latency_ms+' ms':'不可用'):'未测速'}</div><div class="node-use">${escapeHtml(nodeUses(n.tag))}</div><div class="node-actions"><button class="btn ghost small" data-edit-node="${i}">编辑</button><button class="btn ghost small" data-del-node="${i}">删除</button></div></div>`}).join('');$$('[data-edit-node]').forEach(b=>b.onclick=()=>openNode(Number(b.dataset.editNode)));$$('[data-del-node]').forEach(b=>b.onclick=()=>deleteNode(Number(b.dataset.delNode)))}
-function routeOptions(selected=''){const tags=state.nodes.map(n=>n.tag);return'<option value="">不设置</option>'+tags.map(t=>`<option value="${escapeHtml(t)}" ${t===selected?'selected':''}>${escapeHtml(t)}</option>`).join('')}
-function renderRouteForm(){$$('[data-route]').forEach(sel=>{const k=sel.dataset.route;const val=k==='default'?(state.config?.default||''):(state.config?.mappings?.[k]||'');sel.innerHTML=routeOptions(val);sel.onchange=()=>setDirty()})}
-function renderIwanForm(){const box=$('#iwanForm'),i=state.config?.iwan||{};const fields=[['listen','监听地址',i.listen||'0.0.0.0'],['listen_port','监听端口',i.listen_port||8000],['address_pool','地址池',i.address_pool||i.address||''],['mtu','MTU',i.mtu||1400]];box.innerHTML=fields.map(([k,n,v])=>`<label>${n}<input data-iwan="${k}" value="${escapeHtml(v)}"></label>`).join('');$$('[data-iwan]').forEach(x=>x.oninput=()=>setDirty())}
-function openNode(i=-1){$('#nodeDialogTitle').textContent=i<0?'新增节点':'编辑节点';$('#nodeIndex').value=i;const n=i<0?{method:'aes-128-gcm'}:state.nodes[i];$('#nodeTag').value=n.tag||'';$('#nodeServer').value=n.server||'';$('#nodePort').value=n.server_port||'';$('#nodeMethod').value=n.method||'';$('#nodePassword').value='';$('#nodePlugin').value=n.plugin||'';$('#nodePluginOpts').value=n.plugin_opts||'';$('#nodeDialog').showModal()}
-function deleteNode(i){const n=state.nodes[i];if(!confirm(`删除节点 ${n.tag}？保存前不会影响当前配置。`))return;state.deleted.add(n.tag);state.nodes.splice(i,1);setDirty();renderNodes();renderRouteForm()}
-function page(name){$$('.page').forEach(x=>x.classList.toggle('active',x.id===`page-${name}`));$$('[data-page]').forEach(x=>x.classList.toggle('active',x.dataset.page===name));$('#pageTitle').textContent=pageMeta[name][0];$('#pageSub').textContent=pageMeta[name][1];$('#sidebar').classList.remove('open')}
-async function save(){if(!state.config)return;const mappings={};$$('[data-route]').forEach(s=>{if(s.dataset.route!=='default')mappings[s.dataset.route]=s.value});const iwan={};$$('[data-iwan]').forEach(x=>{let v=x.value;if(['listen_port','mtu'].includes(x.dataset.iwan))v=Number(v);iwan[x.dataset.iwan]=v});try{$('#saveBtn').disabled=true;const d=await api('/api/save',{method:'POST',body:JSON.stringify({nodes:state.nodes,deleted_tags:[...state.deleted],mappings,default:$('[data-route="default"]').value,iwan})});toast(d.message||'已保存');setDirty(false);await loadConfig();await loadDashboard()}catch(e){toast(e.message,true)}finally{$('#saveBtn').disabled=false}}
-async function action(action,service=''){try{const d=await api('/api/action',{method:'POST',body:JSON.stringify({action,service})});toast(d.message||'完成');setTimeout(loadDashboard,800)}catch(e){toast(e.message,true)}}
-async function testNodes(){try{$('#testNodesBtn').disabled=true;const d=await api('/api/latency',{method:'POST',body:JSON.stringify({nodes:state.nodes})});state.latency=Object.fromEntries(d.results.map(x=>[x.tag,x]));renderNodes();toast('测速完成')}catch(e){toast(e.message,true)}finally{$('#testNodesBtn').disabled=false}}
-async function loadLogs(){try{$('#logsText').textContent='读取中…';const d=await api('/api/logs?service='+encodeURIComponent($('#logService').value));$('#logsText').textContent=d.logs||'暂无日志'}catch(e){$('#logsText').textContent=e.message}}
-async function loadNetwork(){try{$('#networkText').textContent='读取中…';const d=await api('/api/network');$('#networkText').textContent='[路由]\n'+d.routes+'\n\n[监听端口]\n'+d.ports}catch(e){$('#networkText').textContent=e.message}}
-async function boot(){setTheme(localStorage.getItem('iwan-theme')||'system');try{const s=await api('/api/session');if(!s.authenticated){showLogin();return}state.csrf=s.csrf;showApp();await Promise.all([loadConfig(),loadDashboard()])}catch{showLogin()}}
-$('#loginForm').addEventListener('submit',async e=>{e.preventDefault();try{const d=await api('/api/login',{method:'POST',body:JSON.stringify({username:$('#loginUser').value,password:$('#loginPass').value})});state.csrf=d.csrf;showApp();await Promise.all([loadConfig(),loadDashboard()])}catch(err){$('#loginError').textContent=err.message}});
-$('#themeSelect').onchange=e=>setTheme(e.target.value);$('#menuBtn').onclick=()=>$('#sidebar').classList.toggle('open');$$('[data-page]').forEach(b=>b.onclick=()=>page(b.dataset.page));$$('[data-refresh]').forEach(b=>b.onclick=loadDashboard);$$('[data-action]').forEach(b=>b.onclick=()=>action(b.dataset.action,b.dataset.service||''));$('#logoutBtn').onclick=async()=>{try{await api('/api/logout',{method:'POST',body:'{}'})}finally{showLogin()}};$('#saveBtn').onclick=save;$('#addNodeBtn').onclick=()=>openNode();$('#testNodesBtn').onclick=testNodes;$('#closeNodeDialog').onclick=$('#cancelNodeBtn').onclick=()=>$('#nodeDialog').close();
-$('#nodeForm').addEventListener('submit',e=>{e.preventDefault();const i=Number($('#nodeIndex').value),n={tag:$('#nodeTag').value.trim(),server:$('#nodeServer').value.trim(),server_port:Number($('#nodePort').value),method:$('#nodeMethod').value.trim(),password:$('#nodePassword').value,plugin:$('#nodePlugin').value.trim(),plugin_opts:$('#nodePluginOpts').value.trim()};if(i<0)state.nodes.push(n);else state.nodes[i]={...state.nodes[i],...n};$('#nodeDialog').close();setDirty();renderNodes();renderRouteForm()});
-$('#importBtn').onclick=async()=>{try{const d=await api('/api/import-ss',{method:'POST',body:JSON.stringify({text:$('#importText').value})});for(const n of d.nodes){const i=state.nodes.findIndex(x=>x.tag===n.tag);i>=0?state.nodes[i]={...state.nodes[i],...n}:state.nodes.push(n)}$('#importResult').textContent=d.errors?.join('\n')||`已加入 ${d.nodes.length} 个节点`;setDirty();renderNodes();renderRouteForm()}catch(e){toast(e.message,true)}};$('#loadLogsBtn').onclick=loadLogs;$('#loadNetworkBtn').onclick=loadNetwork;
-setInterval(()=>{if(!document.hidden&&$('#page-dashboard').classList.contains('active'))loadDashboard()},15000);window.addEventListener('beforeunload',e=>{if(state.dirty){e.preventDefault();e.returnValue=''}});boot();
+
+const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const state = { csrf: '', config: null, nodes: [], deleted: new Set(), dirty: false, latency: {} };
+const pageMeta = {
+  dashboard: ['首页', '实时采样现有服务'],
+  nodes: ['节点', '新增、导入和测速'],
+  routing: ['分流', '每类业务自由选择出口'],
+  iwan: ['iWAN', '修改连接账号并自动重连'],
+  logs: ['日志', '按需读取服务和网络信息'],
+};
+
+function toast(message, bad = false) {
+  const element = $('#toast');
+  element.textContent = message;
+  element.style.background = bad ? '#c93e4a' : '';
+  element.classList.add('show');
+  clearTimeout(element._timer);
+  element._timer = setTimeout(() => element.classList.remove('show'), 3200);
+}
+
+async function api(path, options = {}) {
+  options.headers = { ...(options.headers || {}), 'Content-Type': 'application/json' };
+  if (options.method && options.method !== 'GET') options.headers['X-CSRF-Token'] = state.csrf;
+  const response = await fetch(path, options);
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (response.status === 401) {
+    showLogin();
+    throw new Error('登录已过期');
+  }
+  if (!response.ok || data.ok === false) throw new Error(data.error || data.message || `HTTP ${response.status}`);
+  return data;
+}
+
+function setTheme(value) {
+  document.documentElement.dataset.theme = value;
+  localStorage.setItem('iwan-theme', value);
+  $('#themeSelect').value = value;
+}
+
+function formatBytes(number, rate = false) {
+  number = Number(number) || 0;
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let index = 0;
+  while (number >= 1024 && index < units.length - 1) { number /= 1024; index += 1; }
+  return `${number >= 100 || index === 0 ? number.toFixed(0) : number.toFixed(2)} ${units[index]}${rate ? '/s' : ''}`;
+}
+
+function fmtUptime(seconds) {
+  seconds = Number(seconds) || 0;
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor(seconds % 86400 / 3600);
+  const minutes = Math.floor(seconds % 3600 / 60);
+  return days ? `${days}天 ${hours}时` : `${hours}时 ${minutes}分`;
+}
+
+function setDirty(value = true) {
+  state.dirty = value;
+  const button = $('#saveBtn');
+  button.disabled = !value;
+  button.textContent = value ? '保存并应用' : '已保存';
+}
+
+function showLogin() {
+  $('#app').classList.add('hidden');
+  $('#login').classList.remove('hidden');
+}
+
+function showApp() {
+  $('#login').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+}
+
+function servicePill(id, online) {
+  const element = $(id);
+  element.classList.toggle('online', !!online);
+  element.classList.toggle('offline', !online);
+  const name = element.dataset.name || element.textContent.split(' ')[0].split('·')[0].trim();
+  element.dataset.name = name;
+  element.textContent = `${name} · ${online ? '在线' : '离线'}`;
+}
+
+function routeName(key) {
+  return { netflix: 'Netflix', ai: 'ChatGPT / Claude', youtube: 'YouTube', telegram: 'Telegram', default: '其他流量' }[key] || key;
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character]));
+}
+
+function renderRouteSummary(config) {
+  const items = [
+    ['国内网站', 'direct'],
+    ['Netflix', config.mappings.netflix || '未识别'],
+    ['ChatGPT / Claude', config.mappings.ai || '未识别'],
+    ['YouTube', config.mappings.youtube || '未识别'],
+    ['Telegram', config.mappings.telegram || '未识别'],
+    ['其他流量', config.default || '未识别'],
+  ];
+  $('#routeSummary').innerHTML = items.map(([name, outbound]) => `<div class="route-chip"><span>${escapeHtml(name)}</span><strong>${escapeHtml(outbound)}</strong></div>`).join('');
+}
+
+function drawChart(history) {
+  const canvas = $('#trafficChart');
+  const context = canvas.getContext('2d');
+  const ratio = devicePixelRatio || 1;
+  const width = canvas.clientWidth || 600;
+  const height = canvas.clientHeight || 220;
+  canvas.width = width * ratio;
+  canvas.height = height * ratio;
+  context.scale(ratio, ratio);
+  context.clearRect(0, 0, width, height);
+  context.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--line');
+  context.lineWidth = 1;
+  for (let index = 1; index < 4; index += 1) {
+    context.beginPath(); context.moveTo(0, height * index / 4); context.lineTo(width, height * index / 4); context.stroke();
+  }
+  const values = (history || []).slice(-80);
+  const maximum = Math.max(1, ...values.flatMap(item => [item.up, item.down]));
+  function line(key, color) {
+    context.strokeStyle = color; context.lineWidth = 2; context.beginPath();
+    values.forEach((item, index) => {
+      const x = index / Math.max(1, values.length - 1) * width;
+      const y = height - (item[key] / maximum) * (height - 10) - 5;
+      index ? context.lineTo(x, y) : context.moveTo(x, y);
+    });
+    context.stroke();
+  }
+  line('down', '#2f8cf5');
+  line('up', '#17b67a');
+}
+
+async function loadDashboard() {
+  try {
+    const data = await api('/api/dashboard');
+    $('#versionText').textContent = `v${data.version}`;
+    servicePill('#pillIwan', !!data.config.iwan && data.services['sing-box']);
+    servicePill('#pillSing', data.services['sing-box']);
+    servicePill('#pillMos', data.services.mosdns);
+    $('#iwanState').textContent = data.config.iwan ? '已识别' : '未识别';
+    $('#iwanPort').textContent = data.config.iwan.listen_port || '—';
+    $('#iwanPool').textContent = `地址池 ${data.config.iwan.address_pool || data.config.iwan.address || '—'}`;
+    $('#singState').textContent = data.services['sing-box'] ? '运行中' : '已停止';
+    $('#mosState').textContent = data.services.mosdns ? '运行中' : '已停止';
+    $('#defaultNode').textContent = data.config.default || '未识别';
+    $('#nodeCount').textContent = `${data.config.nodes.length} 个节点`;
+    $('#cpuText').textContent = `${data.system.cpu}%`;
+    $('#memText').textContent = `${data.system.memory}%`;
+    $('#cpuBar').style.width = `${data.system.cpu}%`;
+    $('#memBar').style.width = `${data.system.memory}%`;
+    $('#uptimeText').textContent = fmtUptime(data.system.uptime);
+    $('#uploadText').textContent = formatBytes(data.system.upload_bps, true);
+    $('#downloadText').textContent = formatBytes(data.system.download_bps, true);
+    $('#totalText').textContent = formatBytes(data.system.total_bytes);
+    renderRouteSummary(data.config);
+    drawChart(data.history);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function loadConfig() {
+  const config = await api('/api/config');
+  state.config = config;
+  state.nodes = (config.nodes || []).map(node => ({ ...node, password: '' }));
+  state.deleted.clear();
+  renderNodes();
+  renderRouteForm();
+  renderIwanForm();
+  renderRouteSummary(config);
+  setDirty(false);
+}
+
+function nodeUses(tag) {
+  if (!state.config) return '';
+  const uses = [];
+  for (const [key, value] of Object.entries(state.config.mappings || {})) if (value === tag) uses.push(routeName(key));
+  if (state.config.default === tag) uses.push('其他流量');
+  return uses.join('、') || '未分配';
+}
+
+function renderNodes() {
+  const box = $('#nodesList');
+  if (!state.nodes.length) {
+    box.innerHTML = '<div class="hint">尚未识别 Shadowsocks 节点，点击“一键导入”或“新增节点”。</div>';
+    return;
+  }
+  box.innerHTML = state.nodes.map((node, index) => {
+    const latency = state.latency[node.tag];
+    return `<div class="node-card">
+      <strong>${escapeHtml(node.tag)}</strong>
+      <div class="node-meta">${escapeHtml(node.server)}:${escapeHtml(node.server_port)}</div>
+      <div class="latency ${latency?.ok ? 'good' : latency ? 'bad' : ''}">${latency ? (latency.ok ? `${latency.latency_ms} ms` : '不可用') : '未测速'}</div>
+      <div><div class="node-use">${escapeHtml(nodeUses(node.tag))}</div><div class="node-method">${escapeHtml(node.method || '')}</div></div>
+      <div class="node-actions"><button class="btn ghost small" data-edit-node="${index}">编辑</button><button class="btn ghost small" data-del-node="${index}">删除</button></div>
+    </div>`;
+  }).join('');
+  $$('[data-edit-node]').forEach(button => { button.onclick = () => openNode(Number(button.dataset.editNode)); });
+  $$('[data-del-node]').forEach(button => { button.onclick = () => deleteNode(Number(button.dataset.delNode)); });
+}
+
+function routeOptions(selected = '') {
+  return '<option value="">不设置</option>' + state.nodes.map(node => `<option value="${escapeHtml(node.tag)}" ${node.tag === selected ? 'selected' : ''}>${escapeHtml(node.tag)}</option>`).join('');
+}
+
+function renderRouteForm() {
+  $$('[data-route]').forEach(select => {
+    const key = select.dataset.route;
+    const value = key === 'default' ? (state.config?.default || '') : (state.config?.mappings?.[key] || '');
+    select.innerHTML = routeOptions(value);
+    select.onchange = () => setDirty();
+  });
+}
+
+function renderIwanForm() {
+  const box = $('#iwanForm');
+  const iwan = state.config?.iwan || {};
+  const poolKey = Object.prototype.hasOwnProperty.call(iwan, 'address_pool') ? 'address_pool' : 'address';
+  const fields = [
+    ['listen', '监听地址', iwan.listen || '::', 'text'],
+    ['listen_port', '监听端口', iwan.listen_port || 8000, 'number'],
+    [poolKey, '地址池', iwan.address_pool || iwan.address || '', 'text'],
+    ['mtu', 'MTU', iwan.mtu || 1400, 'number'],
+    ['username', '用户名', iwan.username || '', 'text'],
+    ['password', '新密码', '', 'password'],
+  ];
+  box.innerHTML = fields.map(([key, name, value, type]) => {
+    const placeholder = key === 'password' ? (iwan.has_password ? '留空保留当前密码' : '请输入 iWAN 密码') : '';
+    return `<label>${name}<input data-iwan="${key}" type="${type}" value="${escapeHtml(value)}" placeholder="${escapeHtml(placeholder)}"></label>`;
+  }).join('');
+  $$('[data-iwan]').forEach(input => { input.oninput = () => setDirty(); });
+}
+
+function ensureMethodOption(method) {
+  const select = $('#nodeMethod');
+  $$('option[data-custom]', select).forEach(option => option.remove());
+  if (method && ![...select.options].some(option => option.value === method)) {
+    const option = document.createElement('option');
+    option.value = method; option.textContent = `${method}（现有）`; option.dataset.custom = '1';
+    select.appendChild(option);
+  }
+  select.value = method || 'aes-128-gcm';
+}
+
+function openNode(index = -1) {
+  $('#nodeDialogTitle').textContent = index < 0 ? '新增节点' : '编辑节点';
+  $('#nodeIndex').value = index;
+  const node = index < 0 ? { method: 'aes-128-gcm' } : state.nodes[index];
+  $('#nodeTag').value = node.tag || '';
+  $('#nodeServer').value = node.server || '';
+  $('#nodePort').value = node.server_port || '';
+  ensureMethodOption(node.method || 'aes-128-gcm');
+  $('#nodePassword').value = '';
+  $('#nodePlugin').value = node.plugin || '';
+  $('#nodePluginOpts').value = node.plugin_opts || '';
+  $('#nodeDialog').showModal();
+}
+
+function deleteNode(index) {
+  const node = state.nodes[index];
+  if (!confirm(`删除节点 ${node.tag}？保存前不会影响当前配置。`)) return;
+  state.deleted.add(node.tag);
+  state.nodes.splice(index, 1);
+  setDirty(); renderNodes(); renderRouteForm();
+}
+
+function page(name) {
+  $$('.page').forEach(element => element.classList.toggle('active', element.id === `page-${name}`));
+  $$('[data-page]').forEach(element => element.classList.toggle('active', element.dataset.page === name));
+  $('#pageTitle').textContent = pageMeta[name][0];
+  $('#pageSub').textContent = pageMeta[name][1];
+}
+
+async function save() {
+  if (!state.config || !state.dirty) return;
+  const mappings = {};
+  $$('[data-route]').forEach(select => { if (select.dataset.route !== 'default') mappings[select.dataset.route] = select.value; });
+  const iwan = {};
+  $$('[data-iwan]').forEach(input => {
+    let value = input.value;
+    if (['listen_port', 'mtu'].includes(input.dataset.iwan)) value = Number(value);
+    iwan[input.dataset.iwan] = value;
+  });
+  const button = $('#saveBtn');
+  try {
+    button.disabled = true; button.textContent = '应用中…';
+    const data = await api('/api/save', { method: 'POST', body: JSON.stringify({
+      nodes: state.nodes,
+      deleted_tags: [...state.deleted],
+      mappings,
+      default: $('[data-route="default"]').value,
+      iwan,
+    }) });
+    toast(data.message || '已保存并自动重连');
+    await loadConfig();
+    await loadDashboard();
+  } catch (error) {
+    toast(error.message, true);
+    setDirty(true);
+  } finally {
+    if (!state.dirty) { button.disabled = true; button.textContent = '已保存'; }
+  }
+}
+
+async function action(actionName, service = '') {
+  try {
+    const data = await api('/api/action', { method: 'POST', body: JSON.stringify({ action: actionName, service }) });
+    toast(data.message || '完成');
+    setTimeout(loadDashboard, 800);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function testNodes() {
+  try {
+    $('#testNodesBtn').disabled = true;
+    const data = await api('/api/latency', { method: 'POST', body: JSON.stringify({ nodes: state.nodes }) });
+    state.latency = Object.fromEntries(data.results.map(result => [result.tag, result]));
+    renderNodes(); toast('测速完成');
+  } catch (error) { toast(error.message, true); }
+  finally { $('#testNodesBtn').disabled = false; }
+}
+
+async function importNodes() {
+  const text = $('#importText').value.trim();
+  if (!text) { $('#importResult').textContent = '请先粘贴节点内容'; return; }
+  try {
+    const data = await api('/api/import-nodes', { method: 'POST', body: JSON.stringify({ text }) });
+    for (const node of data.nodes) {
+      const index = state.nodes.findIndex(existing => existing.tag === node.tag);
+      index >= 0 ? state.nodes[index] = { ...state.nodes[index], ...node } : state.nodes.push(node);
+    }
+    $('#importResult').textContent = data.errors?.length ? `已加入 ${data.nodes.length} 个节点\n${data.errors.join('\n')}` : `已加入 ${data.nodes.length} 个节点`;
+    setDirty(); renderNodes(); renderRouteForm();
+    toast(`已解析 ${data.nodes.length} 个节点`);
+    setTimeout(() => $('#importDialog').close(), 650);
+  } catch (error) { $('#importResult').textContent = error.message; }
+}
+
+async function loadLogs() {
+  try {
+    $('#logsText').textContent = '读取中…';
+    const data = await api(`/api/logs?service=${encodeURIComponent($('#logService').value)}`);
+    $('#logsText').textContent = data.logs || '暂无日志';
+  } catch (error) { $('#logsText').textContent = error.message; }
+}
+
+async function loadNetwork() {
+  try {
+    $('#networkText').textContent = '读取中…';
+    const data = await api('/api/network');
+    $('#networkText').textContent = `[路由]\n${data.routes}\n\n[监听端口]\n${data.ports}`;
+  } catch (error) { $('#networkText').textContent = error.message; }
+}
+
+async function boot() {
+  setTheme(localStorage.getItem('iwan-theme') || 'system');
+  try {
+    const session = await api('/api/session');
+    if (!session.authenticated) { showLogin(); return; }
+    state.csrf = session.csrf;
+    showApp();
+    await Promise.all([loadConfig(), loadDashboard()]);
+  } catch { showLogin(); }
+}
+
+$('#loginForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  try {
+    const data = await api('/api/login', { method: 'POST', body: JSON.stringify({ username: $('#loginUser').value, password: $('#loginPass').value }) });
+    state.csrf = data.csrf; showApp(); await Promise.all([loadConfig(), loadDashboard()]);
+  } catch (error) { $('#loginError').textContent = error.message; }
+});
+
+$('#themeSelect').onchange = event => setTheme(event.target.value);
+$$('[data-page]').forEach(button => { button.onclick = () => page(button.dataset.page); });
+$$('[data-refresh]').forEach(button => { button.onclick = loadDashboard; });
+$$('[data-action]').forEach(button => { button.onclick = () => action(button.dataset.action, button.dataset.service || ''); });
+$('#logoutBtn').onclick = async () => { try { await api('/api/logout', { method: 'POST', body: '{}' }); } finally { showLogin(); } };
+$('#saveBtn').onclick = save;
+$('#addNodeBtn').onclick = () => openNode();
+$('#testNodesBtn').onclick = testNodes;
+$('#openImportBtn').onclick = () => { $('#importText').value = ''; $('#importResult').textContent = ''; $('#importDialog').showModal(); };
+$('#closeNodeDialog').onclick = $('#cancelNodeBtn').onclick = () => $('#nodeDialog').close();
+$('#closeImportDialog').onclick = $('#cancelImportBtn').onclick = () => $('#importDialog').close();
+
+$('#nodeForm').addEventListener('submit', event => {
+  event.preventDefault();
+  const index = Number($('#nodeIndex').value);
+  const node = {
+    tag: $('#nodeTag').value.trim(), server: $('#nodeServer').value.trim(), server_port: Number($('#nodePort').value),
+    method: $('#nodeMethod').value, password: $('#nodePassword').value,
+    plugin: $('#nodePlugin').value.trim(), plugin_opts: $('#nodePluginOpts').value.trim(),
+  };
+  if (index < 0) state.nodes.push(node); else state.nodes[index] = { ...state.nodes[index], ...node };
+  $('#nodeDialog').close(); setDirty(); renderNodes(); renderRouteForm();
+});
+
+$('#importForm').addEventListener('submit', event => { event.preventDefault(); importNodes(); });
+$('#loadLogsBtn').onclick = loadLogs;
+$('#loadNetworkBtn').onclick = loadNetwork;
+
+setInterval(() => {
+  if (!document.hidden && $('#page-dashboard').classList.contains('active')) loadDashboard();
+}, 15000);
+window.addEventListener('beforeunload', event => { if (state.dirty) { event.preventDefault(); event.returnValue = ''; } });
+boot();
