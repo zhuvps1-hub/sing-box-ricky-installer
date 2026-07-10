@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>iWAN Gateway</title>
+  <link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+  <div id="login" class="auth-screen hidden">
+    <form id="loginForm" class="auth-card">
+      <div class="brand-mark">iW</div>
+      <h1>iWAN Gateway</h1>
+      <p>轻量、安全、独立于底层服务</p>
+      <label>用户名<input id="loginUser" autocomplete="username" required></label>
+      <label>密码<input id="loginPass" type="password" autocomplete="current-password" required></label>
+      <button class="btn primary wide" type="submit">登录</button>
+      <div id="loginError" class="error-text"></div>
+    </form>
+  </div>
+
+  <div id="app" class="app-shell hidden">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark small">iW</div>
+        <div><strong>iWAN Gateway</strong><span id="versionText">v6</span></div>
+      </div>
+      <nav class="nav-list" id="navList">
+        <button class="nav-item active" data-page="dashboard">仪表盘</button>
+        <button class="nav-item" data-page="nodes">节点管理</button>
+        <button class="nav-item" data-page="routing">分流规则</button>
+        <button class="nav-item" data-page="iwan">iWAN 配置</button>
+        <button class="nav-item" data-page="logs">日志与网络</button>
+        <button class="nav-item" data-page="settings">系统设置</button>
+      </nav>
+      <div class="sidebar-note">面板升级不会覆盖 sing-box 或 mosdns</div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="top-left">
+          <button id="menuBtn" class="icon-btn mobile-only" aria-label="菜单">☰</button>
+          <div>
+            <h2 id="pageTitle">仪表盘</h2>
+            <p id="pageSub">实时采样现有服务，不写死任何节点</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <div class="service-pills">
+            <span id="pillIwan" class="pill neutral">iWAN</span>
+            <span id="pillSing" class="pill neutral">sing-box</span>
+            <span id="pillMos" class="pill neutral">mosdns</span>
+          </div>
+          <select id="themeSelect" class="compact-select" aria-label="主题">
+            <option value="system">跟随系统</option>
+            <option value="dark">深色</option>
+            <option value="light">浅色</option>
+          </select>
+          <button id="saveBtn" class="btn primary hidden">保存并应用</button>
+          <button id="logoutBtn" class="btn ghost">退出</button>
+        </div>
+      </header>
+
+      <section id="page-dashboard" class="page active">
+        <div class="metric-grid">
+          <article class="metric-card accent-green">
+            <div class="metric-head"><span>iWAN</span><span id="iwanState" class="state-text">读取中</span></div>
+            <div class="metric-main" id="iwanPort">—</div>
+            <div class="metric-foot"><span>监听端口</span><span id="iwanPool">地址池 —</span></div>
+          </article>
+          <article class="metric-card accent-blue">
+            <div class="metric-head"><span>sing-box</span><span id="singState" class="state-text">读取中</span></div>
+            <div class="metric-main" id="defaultNode">—</div>
+            <div class="metric-foot"><span>默认出口</span><span id="nodeCount">0 个节点</span></div>
+          </article>
+          <article class="metric-card accent-purple">
+            <div class="metric-head"><span>mosdns</span><span id="mosState" class="state-text">读取中</span></div>
+            <div class="metric-main">127.0.0.1:5335</div>
+            <div class="metric-foot"><span>本地 DNS</span><span>API 9091</span></div>
+          </article>
+          <article class="metric-card accent-orange">
+            <div class="metric-head"><span>系统资源</span><span id="uptimeText">—</span></div>
+            <div class="bars">
+              <div><span>CPU</span><b id="cpuText">0%</b></div><i><em id="cpuBar"></em></i>
+              <div><span>内存</span><b id="memText">0%</b></div><i><em id="memBar"></em></i>
+            </div>
+          </article>
+        </div>
+
+        <div class="content-grid two-one">
+          <article class="panel-card">
+            <div class="panel-head"><div><h3>实时网络</h3><p>所有非回环网卡合计</p></div><button class="btn ghost small" data-refresh>刷新</button></div>
+            <div class="speed-row">
+              <div><span>上传</span><strong id="uploadText">0 B/s</strong></div>
+              <div><span>下载</span><strong id="downloadText">0 B/s</strong></div>
+              <div><span>累计</span><strong id="totalText">0 B</strong></div>
+            </div>
+            <canvas id="trafficChart" width="900" height="240"></canvas>
+          </article>
+          <article class="panel-card">
+            <div class="panel-head"><div><h3>快捷操作</h3><p>只执行明确操作</p></div></div>
+            <div class="action-grid">
+              <button class="action-btn green" data-action="restart" data-service="sing-box">重启 sing-box</button>
+              <button class="action-btn purple" data-action="restart" data-service="mosdns">重启 mosdns</button>
+              <button class="action-btn blue" data-action="backup">备份配置</button>
+              <button class="action-btn gray" data-refresh>刷新状态</button>
+            </div>
+          </article>
+        </div>
+
+        <article class="panel-card">
+          <div class="panel-head"><div><h3>当前分流</h3><p>从现有 sing-box 配置自动识别</p></div></div>
+          <div id="routeSummary" class="route-summary"></div>
+        </article>
+      </section>
+
+      <section id="page-nodes" class="page">
+        <article class="panel-card">
+          <div class="panel-head"><div><h3>落地节点</h3><p>支持域名或 IP；密码默认不回显</p></div><div class="head-actions"><button id="testNodesBtn" class="btn ghost small">测速</button><button id="addNodeBtn" class="btn primary small">新增节点</button></div></div>
+          <div id="nodesList" class="nodes-list"></div>
+        </article>
+        <article class="panel-card">
+          <div class="panel-head"><div><h3>批量导入</h3><p>每行一个 ss:// 链接</p></div></div>
+          <textarea id="importText" rows="5" placeholder="ss://..."></textarea>
+          <div class="form-actions"><button id="importBtn" class="btn primary">解析并加入</button></div>
+          <div id="importResult" class="hint"></div>
+        </article>
+      </section>
+
+      <section id="page-routing" class="page">
+        <article class="panel-card">
+          <div class="panel-head"><div><h3>业务分流</h3><p>国内规则保持现有配置，以下业务可自由选择节点</p></div></div>
+          <div class="routing-form">
+            <label><span>国内网站</span><select disabled><option>direct</option></select></label>
+            <label><span>Netflix</span><select data-route="netflix"></select></label>
+            <label><span>ChatGPT / Claude / Gemini</span><select data-route="ai"></select></label>
+            <label><span>YouTube</span><select data-route="youtube"></select></label>
+            <label><span>Telegram</span><select data-route="telegram"></select></label>
+            <label><span>其他流量</span><select data-route="default"></select></label>
+          </div>
+          <div class="notice">保存时先运行 <code>sing-box check</code>，失败不会覆盖现有配置；启动失败会自动回滚。</div>
+        </article>
+      </section>
+
+      <section id="page-iwan" class="page">
+        <article class="panel-card">
+          <div class="panel-head"><div><h3>iWAN 入站</h3><p>自动识别当前 iWAN inbound，仅修改常用字段</p></div></div>
+          <div id="iwanForm" class="form-grid"></div>
+          <div class="notice warn">用户密码不会在页面回显。留空表示保留当前值。</div>
+        </article>
+      </section>
+
+      <section id="page-logs" class="page">
+        <div class="content-grid half">
+          <article class="panel-card">
+            <div class="panel-head"><div><h3>服务日志</h3><p>仅在打开本页时读取</p></div><select id="logService" class="compact-select"><option>sing-box</option><option>mosdns</option><option>iwan-gateway</option></select></div>
+            <pre id="logsText" class="terminal">点击刷新读取日志</pre>
+            <button id="loadLogsBtn" class="btn primary small">刷新日志</button>
+          </article>
+          <article class="panel-card">
+            <div class="panel-head"><div><h3>网络状态</h3><p>路由与监听端口按需读取</p></div></div>
+            <pre id="networkText" class="terminal">点击刷新读取网络信息</pre>
+            <button id="loadNetworkBtn" class="btn primary small">刷新网络</button>
+          </article>
+        </div>
+      </section>
+
+      <section id="page-settings" class="page">
+        <article class="panel-card settings-card">
+          <h3>架构说明</h3>
+          <ul>
+            <li>面板升级只替换面板程序，不触碰 sing-box、mosdns 和业务配置。</li>
+            <li>所有数据从当前系统与配置文件动态采样，不写死任何服务器信息。</li>
+            <li>只有点击“保存并应用”才会修改 sing-box 配置。</li>
+            <li>面板没有 Docker、Node.js、npm、pip 或外部 CDN 依赖。</li>
+          </ul>
+        </article>
+      </section>
+    </main>
+
+    <nav class="mobile-nav">
+      <button data-page="dashboard" class="active">首页</button>
+      <button data-page="nodes">节点</button>
+      <button data-page="routing">分流</button>
+      <button data-page="logs">日志</button>
+    </nav>
+  </div>
+
+  <dialog id="nodeDialog">
+    <form id="nodeForm" method="dialog" class="dialog-form">
+      <div class="dialog-head"><h3 id="nodeDialogTitle">新增节点</h3><button type="button" id="closeNodeDialog" class="icon-btn">×</button></div>
+      <input id="nodeIndex" type="hidden">
+      <label>名称 / Tag<input id="nodeTag" required placeholder="jp-landing"></label>
+      <div class="form-grid two"><label>服务器<input id="nodeServer" required placeholder="example.com"></label><label>端口<input id="nodePort" type="number" min="1" max="65535" required></label></div>
+      <label>加密方式<input id="nodeMethod" required placeholder="aes-128-gcm"></label>
+      <label>密码<input id="nodePassword" type="password" placeholder="留空保留已有密码"></label>
+      <div class="form-grid two"><label>插件<input id="nodePlugin"></label><label>插件参数<input id="nodePluginOpts"></label></div>
+      <div class="dialog-actions"><button type="button" id="cancelNodeBtn" class="btn ghost">取消</button><button type="submit" class="btn primary">确定</button></div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast"></div>
+  <script src="/assets/app.js" defer></script>
+</body>
+</html>
