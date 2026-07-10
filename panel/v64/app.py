@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""iWAN Gateway v6.3.0: asynchronous apply jobs and final interaction layer."""
+"""iWAN Gateway v6.3.1: asynchronous apply jobs and independent routing."""
 from __future__ import annotations
 
 import argparse
@@ -17,7 +17,7 @@ import authcore
 
 core = authcore.core
 moscore = authcore.moscore
-VERSION = "6.3.0"
+VERSION = "6.3.1"
 core.VERSION = VERSION
 moscore.VERSION = VERSION
 authcore.VERSION = VERSION
@@ -67,7 +67,7 @@ class ApplyJobs:
         try:
             ok, message = runner(payload)
             status = "succeeded" if ok else "failed"
-        except Exception as exc:  # defensive: never leave a job permanently running
+        except Exception as exc:
             status = "failed"
             message = str(exc)
         with self.lock:
