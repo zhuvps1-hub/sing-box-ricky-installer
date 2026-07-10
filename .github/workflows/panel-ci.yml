@@ -43,7 +43,7 @@ jobs:
           grep -q "cdn.jsdelivr.net" install-panel-stable.sh
           grep -q "Git Blob" install-panel-stable.sh
       - name: Python syntax
-        run: python -m py_compile panel/app.py panel/v62/app.py panel/v63/app.py panel/v64/app.py panel/v65/app.py panel/v66/app.py panel/v67/app.py
+        run: python -m py_compile panel/app.py panel/v62/app.py panel/v63/app.py panel/v64/app.py panel/v65/app.py panel/v66/app.py panel/v67/app.py panel/v68/app.py
       - name: Test import JSON
         run: cd panel && python tests/test_panel.py PanelTests.test_import_json_outbounds -v
       - name: Test ss link
@@ -62,14 +62,16 @@ jobs:
           node --check panel/v64/web/interaction.js
           node --check panel/v65/web/refreshfix.js
           node --check panel/v67/web/autosave.js
-      - name: Assemble and self-test v6.5 candidate
+          node --check panel/v68/web/autosave.js
+      - name: Assemble and self-test v6.6 candidate
         run: |
           python - <<'PY'
           import os, pathlib, shutil, subprocess, tempfile
           with tempfile.TemporaryDirectory() as td:
               root=pathlib.Path(td,'release'); (root/'web').mkdir(parents=True)
               files={
-                  'panel/v67/app.py':'app.py',
+                  'panel/v68/app.py':'app.py',
+                  'panel/v67/app.py':'autosavecore.py',
                   'panel/v66/app.py':'routingcore.py',
                   'panel/v65/app.py':'statuscore.py',
                   'panel/v64/app.py':'interactioncore.py',
@@ -85,7 +87,7 @@ jobs:
                   'panel/v63/web/remember.js':'web/remember.js',
                   'panel/v64/web/interaction.js':'web/interaction.js',
                   'panel/v65/web/refreshfix.js':'web/refreshfix.js',
-                  'panel/v67/web/autosave.js':'web/autosave.js',
+                  'panel/v68/web/autosave.js':'web/autosave.js',
                   'panel/v67/web/autosave.css':'web/autosave.css',
               }
               for source,target in files.items():
@@ -100,7 +102,7 @@ jobs:
                   'MOSDNS_CONFIG':str(pathlib.Path(td,'mosdns','config.yaml')),
               })
               subprocess.check_call(['python',str(root/'app.py'),'--self-test'],env=env)
-          print('v6.5 candidate self-test passed')
+          print('v6.6 candidate self-test passed')
           PY
       - name: Verify immutable release manifest
         run: |
