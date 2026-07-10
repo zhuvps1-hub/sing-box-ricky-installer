@@ -39,7 +39,7 @@ jobs:
           bash -n install-web.sh
           bash -n install-gateway.sh
       - name: Python syntax
-        run: python -m py_compile panel/app.py panel/v62/app.py panel/v63/app.py panel/v64/app.py
+        run: python -m py_compile panel/app.py panel/v62/app.py panel/v63/app.py panel/v64/app.py panel/v65/app.py
       - name: Test import JSON
         run: cd panel && python tests/test_panel.py PanelTests.test_import_json_outbounds -v
       - name: Test ss link
@@ -56,14 +56,16 @@ jobs:
           node --check panel/v62/web/app.js
           node --check panel/v63/web/remember.js
           node --check panel/v64/web/interaction.js
-      - name: Assemble and self-test v6.3 candidate
+          node --check panel/v65/web/refreshfix.js
+      - name: Assemble and self-test v6.3.2 candidate
         run: |
           python - <<'PY'
           import os, pathlib, shutil, subprocess, tempfile
           with tempfile.TemporaryDirectory() as td:
               root=pathlib.Path(td,'release'); (root/'web').mkdir(parents=True)
               files={
-                  'panel/v64/app.py':'app.py',
+                  'panel/v65/app.py':'app.py',
+                  'panel/v64/app.py':'interactioncore.py',
                   'panel/v63/app.py':'authcore.py',
                   'panel/v62/app.py':'moscore.py',
                   'panel/app.py':'core.py',
@@ -75,6 +77,7 @@ jobs:
                   'panel/v63/web/remember.js':'web/remember.js',
                   'panel/v64/web/interaction.js':'web/interaction.js',
                   'panel/v64/web/interaction.css':'web/interaction.css',
+                  'panel/v65/web/refreshfix.js':'web/refreshfix.js',
               }
               for source,target in files.items():
                   shutil.copy2(source,root/target)
@@ -88,7 +91,7 @@ jobs:
                   'MOSDNS_CONFIG':str(pathlib.Path(td,'mosdns','config.yaml')),
               })
               subprocess.check_call(['python',str(root/'app.py'),'--self-test'],env=env)
-          print('v6.3 candidate self-test passed')
+          print('v6.3.2 candidate self-test passed')
           PY
       - name: Verify immutable release manifest
         run: |
