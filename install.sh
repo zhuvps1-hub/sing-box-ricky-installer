@@ -4,7 +4,7 @@ set -Eeuo pipefail
 VERSION="1.13.13-rickyhao.22"
 ARCHIVE="sing-box-${VERSION}-linux-amd64.tar.gz"
 BASE_URL="https://raw.githubusercontent.com/zhuvps1-hub/sing-box-ricky-installer/main"
-DOWNLOAD_URL="${BASE_URL}/${ARCHIVE}"
+DOWNLOAD_URL="https://github.com/Ricky-Hao/sing-box/releases/download/v${VERSION}/${ARCHIVE}"
 EXPECTED_SHA256="d650de9b0cb3852ec4e878ae2291631f0891d3b71fdd1998745c20ea8780bc1f"
 INSTALL_DIR="/usr/local/lib/sing-box"
 BIN_LINK="/usr/local/bin/sing-box"
