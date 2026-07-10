@@ -137,7 +137,8 @@ install -m 0755 "${SRC_DIR}/sing-box" "${INSTALL_DIR}/sing-box"
 [[ -f "${SRC_DIR}/LICENSE" ]] && install -m 0644 "${SRC_DIR}/LICENSE" "${INSTALL_DIR}/LICENSE"
 ln -sfn "${INSTALL_DIR}/sing-box" "${BIN_LINK}"
 
-"${BIN_LINK}" version | grep -q 'with_iwan' || die "当前二进制未检测到 with_iwan 标签。"
+VERSION_OUTPUT=$("${BIN_LINK}" version)
+grep -q 'with_iwan' <<<"${VERSION_OUTPUT}" || die "当前二进制未检测到 with_iwan 标签。"
 
 if [[ -f "${CONFIG_FILE}" ]]; then
   BACKUP_FILE="${CONFIG_FILE}.bak.$(date +%Y%m%d-%H%M%S)"
@@ -246,7 +247,7 @@ systemctl is-active --quiet sing-box || {
 }
 
 info "安装完成，sing-box 已运行并设置为开机自启。"
-"${BIN_LINK}" version | head -n 8
+sed -n '1,8p' <<<"${VERSION_OUTPUT}"
 printf '\n当前分流：\n'
 printf '  国内网站      → direct\n'
 printf '  Netflix / AI → sg-landing\n'
