@@ -1,29 +1,47 @@
 {
-  "version": "6.1.0",
-  "ref": "8d5bea047f9d750afc587ead464134a402889f1e",
+  "version": "6.2.0",
+  "ref": "078e58b9a469c0916dbd44f273d0527dd381a9d5",
   "files": [
     {
-      "source": "panel/app.py",
+      "source": "panel/v62/app.py",
       "target": "app.py",
+      "git_blob": "6eeb5ab92af6ed9fe7b69b71c814e5c1108048a7",
+      "mode": "0755"
+    },
+    {
+      "source": "panel/app.py",
+      "target": "core.py",
       "git_blob": "f197dffc9456775a44a0319d233f8cf8796e6dd6",
       "mode": "0755"
     },
     {
-      "source": "panel/web/index.html",
+      "source": "panel/v62/web/index.html",
       "target": "web/index.html",
-      "git_blob": "d70015367dec3c03a09c732fcae8956e5c5eb081",
+      "git_blob": "f72b9e103b4738febc506d561a873b848f82343e",
       "mode": "0644"
     },
     {
       "source": "panel/web/app.css",
-      "target": "web/app.css",
+      "target": "web/core.css",
       "git_blob": "98ca0fe98d39d479f40b22d5d1252b1f3c0fe9fb",
       "mode": "0644"
     },
     {
+      "source": "panel/v62/web/app.css",
+      "target": "web/app.css",
+      "git_blob": "a63d94ae514d64104487444ba4531e8d91e47992",
+      "mode": "0644"
+    },
+    {
       "source": "panel/web/app.js",
-      "target": "web/app.js",
+      "target": "web/core.js",
       "git_blob": "b5c5caa95efc926cc86fa600380c29d5578bd77b",
+      "mode": "0644"
+    },
+    {
+      "source": "panel/v62/web/app.js",
+      "target": "web/app.js",
+      "git_blob": "eab02a59482bf3751eb4c122d1daad6723a1ae38",
       "mode": "0644"
     }
   ]
