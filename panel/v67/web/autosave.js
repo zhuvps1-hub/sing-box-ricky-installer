@@ -55,10 +55,12 @@
             setDirty(true);
             toast(status.message || '自动保存失败，已恢复旧配置', true);
           }
+          lastSubmitted = 0;
           return;
         }
         if (Number(status.applied_seq || 0) >= lastSubmitted) {
           state.deleted.clear();
+          lastSubmitted = 0;
           return;
         }
         await sleep(1300);
@@ -79,7 +81,7 @@
       sendAgain = true;
       return;
     }
-    if (!state.config) return;
+    if (!state.config || !state.dirty) return;
 
     sending = true;
     const payload = routePayload();

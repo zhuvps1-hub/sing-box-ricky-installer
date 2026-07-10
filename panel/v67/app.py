@@ -128,6 +128,8 @@ AUTOSAVE = AutosaveQueue()
 
 def page_html() -> bytes:
     html = routingcore.page_html().decode("utf-8")
+    if "silent-autosave" not in html.partition(">")[0]:
+        html = html.replace("<html", '<html class="silent-autosave"', 1)
     if "/assets/autosave.css" not in html:
         html = html.replace("</head>", '  <link rel="stylesheet" href="/assets/autosave.css">\n</head>', 1)
     if "/assets/autosave.js" not in html:
@@ -195,8 +197,10 @@ def self_test() -> None:
     status = queue.snapshot()
     assert status["applied_seq"] == second
     assert calls == [2]
-    assert b"autosave.js" in page_html()
-    assert b"autosave.css" in page_html()
+    rendered = page_html()
+    assert b"autosave.js" in rendered
+    assert b"autosave.css" in rendered
+    assert b"silent-autosave" in rendered
     print(json.dumps({"ok": True, "version": VERSION, "autosave": "coalesced"}))
 
 
