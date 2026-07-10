@@ -1,11 +1,11 @@
 {
-  "version": "6.3.0",
-  "ref": "568ecb509a341671b063628dbd5fa4ea074eb037",
+  "version": "6.3.1",
+  "ref": "000681f36c432e7ded72d4c427fce23c3801e66c",
   "files": [
     {
       "source": "panel/v64/app.py",
       "target": "app.py",
-      "git_blob": "246ec0e720e4ef521179241fda526391a8def0e3",
+      "git_blob": "04eb278bb863163868e341bf17bbd17e25fdd92a",
       "mode": "0755"
     },
     {
@@ -71,7 +71,7 @@
     {
       "source": "panel/v64/web/interaction.js",
       "target": "web/interaction.js",
-      "git_blob": "84aae720029b11640b57957cce3a8b8942b1e9ab",
+      "git_blob": "710cba5a3c7cb0e9396a2ce44e214bfc775d7578",
       "mode": "0644"
     }
   ]
