@@ -1,10 +1,16 @@
 {
-  "version": "6.2.0",
-  "ref": "078e58b9a469c0916dbd44f273d0527dd381a9d5",
+  "version": "6.2.1",
+  "ref": "db455627966864bb280eada59d1be8fa64db8d9a",
   "files": [
     {
-      "source": "panel/v62/app.py",
+      "source": "panel/v63/app.py",
       "target": "app.py",
+      "git_blob": "7621a830acf579a8d2e8c24b81849ef04bbcaf76",
+      "mode": "0755"
+    },
+    {
+      "source": "panel/v62/app.py",
+      "target": "moscore.py",
       "git_blob": "6eeb5ab92af6ed9fe7b69b71c814e5c1108048a7",
       "mode": "0755"
     },
@@ -27,9 +33,9 @@
       "mode": "0644"
     },
     {
-      "source": "panel/v62/web/app.css",
+      "source": "panel/v63/web/app.css",
       "target": "web/app.css",
-      "git_blob": "a63d94ae514d64104487444ba4531e8d91e47992",
+      "git_blob": "96eb1bd3c4eff9602e3fcb6d39c36be09e318d42",
       "mode": "0644"
     },
     {
@@ -42,6 +48,12 @@
       "source": "panel/v62/web/app.js",
       "target": "web/app.js",
       "git_blob": "eab02a59482bf3751eb4c122d1daad6723a1ae38",
+      "mode": "0644"
+    },
+    {
+      "source": "panel/v63/web/remember.js",
+      "target": "web/remember.js",
+      "git_blob": "3c173b91de349b0c8491fd6af1c0fb3aadb9545d",
       "mode": "0644"
     }
   ]
