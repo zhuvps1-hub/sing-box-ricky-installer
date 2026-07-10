@@ -5,6 +5,7 @@ on:
     paths:
       - "panel/**"
       - "panel-release.json"
+      - "install-panel-stable.sh"
       - "install-panel.sh"
       - "install-panel-v6.sh"
       - "install-web.sh"
@@ -14,6 +15,7 @@ on:
     paths:
       - "panel/**"
       - "panel-release.json"
+      - "install-panel-stable.sh"
       - "install-panel.sh"
       - "install-panel-v6.sh"
       - "install-web.sh"
@@ -31,6 +33,7 @@ jobs:
           python-version: "3.11"
       - name: Shell syntax
         run: |
+          bash -n install-panel-stable.sh
           bash -n install-panel.sh
           bash -n install-panel-v6.sh
           bash -n install-web.sh
@@ -55,18 +58,18 @@ jobs:
               assert actual == item['git_blob'], (item['source'], actual, item['git_blob'])
           print('manifest verified')
           PY
-      - name: Simulate API base64 decode and blob verification
+      - name: Simulate GitHub API Base64 formatting
         run: |
           python - <<'PY'
-          import base64, hashlib, json, pathlib, subprocess, tempfile
+          import base64, hashlib, json, pathlib, subprocess, tempfile, textwrap
           manifest=json.load(open('panel-release.json',encoding='utf-8'))
           with tempfile.TemporaryDirectory() as td:
               for item in manifest['files']:
                   data=subprocess.check_output(['git','show',f"{manifest['ref']}:{item['source']}"])
-                  api={'sha':item['git_blob'],'encoding':'base64','content':base64.b64encode(data).decode()}
-                  decoded=base64.b64decode(api['content'],validate=True)
+                  wrapped='\n'.join(textwrap.wrap(base64.b64encode(data).decode(),60))
+                  decoded=base64.b64decode(''.join(wrapped.split()),validate=True)
                   actual=hashlib.sha1(b'blob '+str(len(decoded)).encode()+b'\0'+decoded).hexdigest()
-                  assert api['sha']==item['git_blob']==actual
+                  assert item['git_blob']==actual
                   target=pathlib.Path(td,item['target']); target.parent.mkdir(parents=True,exist_ok=True); target.write_bytes(decoded)
-          print('API decode path verified')
+          print('wrapped API Base64 path verified')
           PY
