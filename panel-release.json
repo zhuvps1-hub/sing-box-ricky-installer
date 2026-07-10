@@ -1,10 +1,16 @@
 {
-  "version": "6.3.1",
-  "ref": "000681f36c432e7ded72d4c427fce23c3801e66c",
+  "version": "6.3.2",
+  "ref": "78298ed29e983ff403ec9574ce8ecb301ad58cc8",
   "files": [
     {
-      "source": "panel/v64/app.py",
+      "source": "panel/v65/app.py",
       "target": "app.py",
+      "git_blob": "8b1fa009fc66ff5739936c535119c8f79201ecbb",
+      "mode": "0755"
+    },
+    {
+      "source": "panel/v64/app.py",
+      "target": "interactioncore.py",
       "git_blob": "04eb278bb863163868e341bf17bbd17e25fdd92a",
       "mode": "0755"
     },
@@ -72,6 +78,12 @@
       "source": "panel/v64/web/interaction.js",
       "target": "web/interaction.js",
       "git_blob": "710cba5a3c7cb0e9396a2ce44e214bfc775d7578",
+      "mode": "0644"
+    },
+    {
+      "source": "panel/v65/web/refreshfix.js",
+      "target": "web/refreshfix.js",
+      "git_blob": "714add486a97bb10b59ef70bcbe274c652b5805d",
       "mode": "0644"
     }
   ]
