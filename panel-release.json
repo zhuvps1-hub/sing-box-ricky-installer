@@ -1,10 +1,16 @@
 {
-  "version": "6.2.1",
-  "ref": "db455627966864bb280eada59d1be8fa64db8d9a",
+  "version": "6.3.0",
+  "ref": "568ecb509a341671b063628dbd5fa4ea074eb037",
   "files": [
     {
-      "source": "panel/v63/app.py",
+      "source": "panel/v64/app.py",
       "target": "app.py",
+      "git_blob": "246ec0e720e4ef521179241fda526391a8def0e3",
+      "mode": "0755"
+    },
+    {
+      "source": "panel/v63/app.py",
+      "target": "authcore.py",
       "git_blob": "7621a830acf579a8d2e8c24b81849ef04bbcaf76",
       "mode": "0755"
     },
@@ -39,6 +45,12 @@
       "mode": "0644"
     },
     {
+      "source": "panel/v64/web/interaction.css",
+      "target": "web/interaction.css",
+      "git_blob": "a2e35ef6a624a71ab9b50c8267bf20538bf37d24",
+      "mode": "0644"
+    },
+    {
       "source": "panel/web/app.js",
       "target": "web/core.js",
       "git_blob": "b5c5caa95efc926cc86fa600380c29d5578bd77b",
@@ -54,6 +66,12 @@
       "source": "panel/v63/web/remember.js",
       "target": "web/remember.js",
       "git_blob": "3c173b91de349b0c8491fd6af1c0fb3aadb9545d",
+      "mode": "0644"
+    },
+    {
+      "source": "panel/v64/web/interaction.js",
+      "target": "web/interaction.js",
+      "git_blob": "84aae720029b11640b57957cce3a8b8942b1e9ab",
       "mode": "0644"
     }
   ]
