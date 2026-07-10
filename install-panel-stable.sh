@@ -2,6 +2,8 @@
 set -Eeuo pipefail
 
 REPO="zhuvps1-hub/sing-box-ricky-installer"
+RAW_BASE="${RAW_BASE:-https://raw.githubusercontent.com}"
+JSDELIVR_BASE="${JSDELIVR_BASE:-https://cdn.jsdelivr.net/gh}"
 BASE_DIR="/opt/iwan-gateway-panel"
 RELEASES_DIR="$BASE_DIR/releases"
 CURRENT_LINK="$BASE_DIR/current"
@@ -62,52 +64,100 @@ TMP="$(mktemp -d)"
 mkdir -p "$TMP/stage" "$TMP/candidate-config" "$TMP/candidate-data" "$TMP/new-auth" "$CONFIG_DIR" "$DATA_DIR" "$RELEASES_DIR"
 chmod 700 "$CONFIG_DIR" "$DATA_DIR" "$TMP/candidate-config" "$TMP/candidate-data" "$TMP/new-auth"
 
-info "从 GitHub 对象接口下载并验证稳定版本…"
-REPO="$REPO" DEST="$TMP/stage" META="$TMP/release.env" GITHUB_TOKEN="${GITHUB_TOKEN:-}" python3 - <<'PY'
-import base64,hashlib,json,os,pathlib,re,urllib.error,urllib.parse,urllib.request
-repo=os.environ['REPO']; dest=pathlib.Path(os.environ['DEST']); meta=pathlib.Path(os.environ['META']); token=os.environ.get('GITHUB_TOKEN','')
-api=f'https://api.github.com/repos/{repo}'
-headers={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'iwan-gateway-installer'}
-if token: headers['Authorization']='Bearer '+token
+info "通过固定提交 Raw 下载并验证稳定版本（不使用 GitHub API）…"
+REPO="$REPO" RAW_BASE="$RAW_BASE" JSDELIVR_BASE="$JSDELIVR_BASE" DEST="$TMP/stage" META="$TMP/release.env" python3 - <<'PY'
+import hashlib
+import json
+import os
+import pathlib
+import re
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 
-def request(url):
-    req=urllib.request.Request(url,headers=headers)
-    try:
-        with urllib.request.urlopen(req,timeout=60) as r: return json.load(r)
-    except urllib.error.HTTPError as e:
-        body=e.read().decode('utf-8','replace')[:500]
-        raise SystemExit(f'GitHub API 请求失败 HTTP {e.code}: {body}')
+repo = os.environ["REPO"]
+raw_base = os.environ["RAW_BASE"].rstrip("/")
+jsdelivr_base = os.environ["JSDELIVR_BASE"].rstrip("/")
+dest = pathlib.Path(os.environ["DEST"])
+meta = pathlib.Path(os.environ["META"])
+headers = {
+    "User-Agent": "iwan-gateway-installer/2",
+    "Accept": "application/octet-stream",
+    "Cache-Control": "no-cache",
+}
 
-def decode(obj,label):
-    if obj.get('encoding')!='base64' or not obj.get('content'): raise SystemExit(label+' 未返回 Base64 内容')
-    compact=''.join(str(obj['content']).split())
-    try: return base64.b64decode(compact,validate=True)
-    except Exception as e: raise SystemExit(label+' Base64 解码失败: '+str(e))
+def fetch_bytes(urls, label):
+    errors = []
+    for url in urls:
+        for attempt in range(1, 4):
+            request = urllib.request.Request(url, headers=headers)
+            try:
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    data = response.read()
+                if not data:
+                    raise RuntimeError("返回内容为空")
+                return data
+            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError, RuntimeError) as exc:
+                errors.append(f"{url} [{attempt}/3]: {exc}")
+                if attempt < 3:
+                    time.sleep(attempt)
+    raise SystemExit(label + " 下载失败：\n" + "\n".join(errors[-6:]))
 
-manifest_obj=request(api+'/contents/panel-release.json?ref=main')
-manifest=json.loads(decode(manifest_obj,'发布清单').decode('utf-8'))
-version=str(manifest.get('version','')); ref=str(manifest.get('ref','')); files=manifest.get('files',[])
-if not re.fullmatch(r'\d+\.\d+\.\d+',version): raise SystemExit('发布版本号无效')
-if not re.fullmatch(r'[0-9a-f]{40}',ref): raise SystemExit('固定提交无效')
-if not isinstance(files,list) or not 1<=len(files)<=20: raise SystemExit('发布文件清单无效')
+cache_key = str(int(time.time()))
+manifest_data = fetch_bytes([
+    f"{raw_base}/{repo}/main/panel-release.json?ts={cache_key}",
+    f"{jsdelivr_base}/{repo}@main/panel-release.json?ts={cache_key}",
+], "发布清单")
+try:
+    manifest = json.loads(manifest_data.decode("utf-8"))
+except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+    raise SystemExit("发布清单解析失败：" + str(exc))
+
+version = str(manifest.get("version", ""))
+ref = str(manifest.get("ref", ""))
+files = manifest.get("files", [])
+if not re.fullmatch(r"\d+\.\d+\.\d+", version):
+    raise SystemExit("发布版本号无效")
+if not re.fullmatch(r"[0-9a-f]{40}", ref):
+    raise SystemExit("固定提交无效")
+if not isinstance(files, list) or not 1 <= len(files) <= 30:
+    raise SystemExit("发布文件清单无效")
+
 for item in files:
-    src=str(item.get('source','')); target=str(item.get('target','')); expected=str(item.get('git_blob','')); mode=str(item.get('mode','0644'))
-    if not re.fullmatch(r'[A-Za-z0-9_./-]+',src) or '..' in src.split('/'): raise SystemExit('源路径无效: '+src)
-    if not re.fullmatch(r'[A-Za-z0-9_./-]+',target) or '..' in target.split('/'): raise SystemExit('目标路径无效: '+target)
-    if not re.fullmatch(r'[0-9a-f]{40}',expected): raise SystemExit('Blob SHA 无效: '+src)
-    if mode not in ('0644','0755'): raise SystemExit('权限无效: '+src)
-    url=api+'/contents/'+urllib.parse.quote(src,safe='/')+'?ref='+ref
-    obj=request(url)
-    if obj.get('sha')!=expected: raise SystemExit(f'GitHub Blob 不一致 {src}: 期望 {expected}, 实际 {obj.get("sha")}')
-    data=decode(obj,src)
-    actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
-    if actual!=expected: raise SystemExit(f'解码后 Blob 不一致 {src}: 期望 {expected}, 实际 {actual}')
-    out=dest/target; out.parent.mkdir(parents=True,exist_ok=True); out.write_bytes(data); out.chmod(int(mode,8))
-required=['app.py','web/index.html','web/app.css','web/app.js']
+    src = str(item.get("source", ""))
+    target = str(item.get("target", ""))
+    expected = str(item.get("git_blob", ""))
+    mode = str(item.get("mode", "0644"))
+    if not re.fullmatch(r"[A-Za-z0-9_./-]+", src) or ".." in src.split("/"):
+        raise SystemExit("源路径无效：" + src)
+    if not re.fullmatch(r"[A-Za-z0-9_./-]+", target) or ".." in target.split("/"):
+        raise SystemExit("目标路径无效：" + target)
+    if not re.fullmatch(r"[0-9a-f]{40}", expected):
+        raise SystemExit("Blob SHA 无效：" + src)
+    if mode not in ("0644", "0755"):
+        raise SystemExit("权限无效：" + src)
+
+    encoded_src = urllib.parse.quote(src, safe="/")
+    data = fetch_bytes([
+        f"{raw_base}/{repo}/{ref}/{encoded_src}?blob={expected}",
+        f"{jsdelivr_base}/{repo}@{ref}/{encoded_src}?blob={expected}",
+    ], src)
+    actual = hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+    if actual != expected:
+        raise SystemExit(f"文件校验失败 {src}：期望 {expected}，实际 {actual}")
+    output = dest / target
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(data)
+    output.chmod(int(mode, 8))
+
+required = ["app.py", "web/index.html", "web/app.css", "web/app.js"]
 for name in required:
-    if not (dest/name).is_file(): raise SystemExit('缺少发布文件: '+name)
-meta.write_text('VERSION='+version+'\nREF='+ref+'\n',encoding='utf-8')
-print(f'已验证 {len(files)} 个文件，版本 {version}，提交 {ref[:12]}')
+    if not (dest / name).is_file():
+        raise SystemExit("缺少发布文件：" + name)
+
+meta.write_text(f"VERSION={version}\nREF={ref}\n", encoding="utf-8")
+print(f"已验证 {len(files)} 个文件，版本 {version}，提交 {ref[:12]}")
 PY
 
 # 版本号与提交均已通过正则校验，可安全导入。
@@ -239,4 +289,4 @@ PUBLIC_IP="$(curl -4fsS --connect-timeout 3 https://api.ipify.org 2>/dev/null ||
 info "iWAN Gateway v$VERSION 安装/升级完成。"
 printf '\n访问：http://%s:%s\n' "${PUBLIC_IP:-你的VPS公网IP}" "$PANEL_PORT"
 printf '底层：未安装、未覆盖、未重启 sing-box 和 mosdns。\n'
-printf '验证：GitHub 官方 Blob → 语法 → 自检 → 临时启动 → 登录 → 配置采样 → 正式健康检查。\n'
+printf '验证：固定提交 Raw → Git Blob 校验 → 语法 → 自检 → 临时启动 → 登录 → 配置采样 → 正式健康检查。\n'
