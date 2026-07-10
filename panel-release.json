@@ -1,6 +1,6 @@
 {
   "version": "6.5.0",
-  "ref": "92b44fef63d9247e68dc0418c599369e1cb4fe62",
+  "ref": "4fff843194ed88478b67692e4df7bed05cd1b4f0",
   "files": [
     {
       "source": "panel/v67/app.py",
@@ -107,7 +107,7 @@
     {
       "source": "panel/v67/web/autosave.js",
       "target": "web/autosave.js",
-      "git_blob": "18b52790f359e4ab45b05bb55b1b4fea9c16abe1",
+      "git_blob": "ea20eabea9ba92ddadbef34135db005d57bd6910",
       "mode": "0644"
     }
   ]
