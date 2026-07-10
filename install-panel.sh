@@ -57,6 +57,7 @@ for part in 00 01 02; do
 done
 base64 -d "$PAYLOAD" | gzip -dc > "$PANEL_DIR/panel.py"
 rm -f "$PAYLOAD"
+echo "f7451d8cca416c384a4abe786cddeb6d0998333b4799dc58112467046cb19f04  $PANEL_DIR/panel.py" | sha256sum -c - >/dev/null || die "面板文件完整性校验失败。"
 chmod 755 "$PANEL_DIR/panel.py"
 python3 -m py_compile "$PANEL_DIR/panel.py" || die "面板程序语法检查失败。"
 
