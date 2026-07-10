@@ -40,7 +40,7 @@ jobs:
           bash -n install-gateway.sh
       - name: Python syntax and unit tests
         run: |
-          python -m py_compile panel/app.py panel/v62/app.py panel/v63/app.py
+          python -m py_compile panel/app.py panel/v62/app.py panel/v63/app.py panel/v64/app.py
           cd panel
           python -m unittest discover -s tests -v
       - name: JavaScript syntax
@@ -48,6 +48,41 @@ jobs:
           node --check panel/web/app.js
           node --check panel/v62/web/app.js
           node --check panel/v63/web/remember.js
+          node --check panel/v64/web/interaction.js
+      - name: Assemble and self-test v6.3 candidate
+        run: |
+          python - <<'PY'
+          import os, pathlib, shutil, subprocess, tempfile
+          with tempfile.TemporaryDirectory() as td:
+              root=pathlib.Path(td,'release'); (root/'web').mkdir(parents=True)
+              files={
+                  'panel/v64/app.py':'app.py',
+                  'panel/v63/app.py':'authcore.py',
+                  'panel/v62/app.py':'moscore.py',
+                  'panel/app.py':'core.py',
+                  'panel/v62/web/index.html':'web/index.html',
+                  'panel/web/app.css':'web/core.css',
+                  'panel/v63/web/app.css':'web/app.css',
+                  'panel/web/app.js':'web/core.js',
+                  'panel/v62/web/app.js':'web/app.js',
+                  'panel/v63/web/remember.js':'web/remember.js',
+                  'panel/v64/web/interaction.js':'web/interaction.js',
+                  'panel/v64/web/interaction.css':'web/interaction.css',
+              }
+              for source,target in files.items():
+                  shutil.copy2(source,root/target)
+              env=os.environ.copy()
+              env.update({
+                  'IWAN_PANEL_CONFIG_DIR':str(pathlib.Path(td,'config')),
+                  'IWAN_PANEL_DATA_DIR':str(pathlib.Path(td,'data')),
+                  'SINGBOX_BACKUP_DIR':str(pathlib.Path(td,'singbox-backups')),
+                  'MOSDNS_BACKUP_DIR':str(pathlib.Path(td,'mosdns-backups')),
+                  'SINGBOX_CONFIG':str(pathlib.Path(td,'sing-box.json')),
+                  'MOSDNS_CONFIG':str(pathlib.Path(td,'mosdns','config.yaml')),
+              })
+              subprocess.check_call(['python',str(root/'app.py'),'--self-test'],env=env)
+          print('v6.3 candidate self-test passed')
+          PY
       - name: Verify immutable release manifest
         run: |
           python - <<'PY'
