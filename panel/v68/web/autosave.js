@@ -252,12 +252,5 @@
     if (target.closest('#confirmImportBtn')) afterCurrentHandler(1000);
   }, true);
 
-  window.addEventListener('online', () => {
-    if (currentJob && !currentJob.finished && !currentJob.superseded) {
-      // runJob is already retrying; this only shortens the next user edit debounce.
-      window.clearTimeout(timer);
-    }
-  });
-
   installPageUi();
 })();
