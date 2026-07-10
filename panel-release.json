@@ -1,6 +1,6 @@
 {
   "version": "6.1.0",
-  "ref": "95add0855e1196a140fbe0e28dda7dbb0adc22ee",
+  "ref": "8d5bea047f9d750afc587ead464134a402889f1e",
   "files": [
     {
       "source": "panel/app.py",
@@ -23,7 +23,7 @@
     {
       "source": "panel/web/app.js",
       "target": "web/app.js",
-      "git_blob": "0c9c6f699d2563aba5c2ebafea4e19de171e13e6",
+      "git_blob": "b5c5caa95efc926cc86fa600380c29d5578bd77b",
       "mode": "0644"
     }
   ]
