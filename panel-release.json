@@ -1,17 +1,17 @@
 {
-  "version": "6.4.1",
-  "ref": "735527b5f89239e3d74ea26da942f29db01d0e86",
+  "version": "6.4.2",
+  "ref": "8990cc2fe1cc05022c743dbf0443365d85708d4f",
   "files": [
     {
       "source": "panel/v67/app.py",
       "target": "app.py",
-      "git_blob": "6a04e9bdf08501c117ef3be332c7e7f838faef3a",
+      "git_blob": "c985a5e9d702e990a0948b56033ca386bf0930e8",
       "mode": "0755"
     },
     {
       "source": "panel/v66/app.py",
       "target": "routingcore.py",
-      "git_blob": "08c309be444e0531eb2c0f9cbea7e4b0861404da",
+      "git_blob": "83b783cef2e99d43450b74c46fca7902fd7c317c",
       "mode": "0755"
     },
     {
