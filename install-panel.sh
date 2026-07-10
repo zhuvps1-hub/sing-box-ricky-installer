@@ -19,13 +19,13 @@ command -v systemctl >/dev/null 2>&1 || die "系统未使用 systemd。"
 
 if command -v apt-get >/dev/null 2>&1; then
   apt-get update -y
-  DEBIAN_FRONTEND=noninteractive apt-get install -y python3 ca-certificates curl
+  DEBIAN_FRONTEND=noninteractive apt-get install -y python3 ca-certificates curl gzip coreutils
 elif command -v dnf >/dev/null 2>&1; then
-  dnf install -y python3 ca-certificates curl
+  dnf install -y python3 ca-certificates curl gzip coreutils
 elif command -v yum >/dev/null 2>&1; then
-  yum install -y python3 ca-certificates curl
+  yum install -y python3 ca-certificates curl gzip coreutils
 else
-  command -v python3 >/dev/null 2>&1 && command -v curl >/dev/null 2>&1 || die "请先安装 python3 和 curl。"
+  command -v python3 >/dev/null 2>&1 && command -v curl >/dev/null 2>&1 && command -v gzip >/dev/null 2>&1 && command -v base64 >/dev/null 2>&1 || die "请先安装 python3、curl、gzip 和 base64。"
 fi
 
 if [[ -t 0 ]]; then
@@ -50,7 +50,13 @@ fi
 mkdir -p "$PANEL_DIR" "$PANEL_CONFIG_DIR" /etc/sing-box/backups
 chmod 700 "$PANEL_CONFIG_DIR"
 info "下载 Web 管理面板…"
-curl -fL --retry 3 --connect-timeout 15 "$BASE_URL/panel.py" -o "$PANEL_DIR/panel.py"
+PAYLOAD="$PANEL_DIR/panel.py.gz.b64"
+: > "$PAYLOAD"
+for part in 00 01 02; do
+  curl -fL --retry 3 --connect-timeout 15 "$BASE_URL/panel.py.gz.b64.part${part}" >> "$PAYLOAD"
+done
+base64 -d "$PAYLOAD" | gzip -dc > "$PANEL_DIR/panel.py"
+rm -f "$PAYLOAD"
 chmod 755 "$PANEL_DIR/panel.py"
 python3 -m py_compile "$PANEL_DIR/panel.py" || die "面板程序语法检查失败。"
 
