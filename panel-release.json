@@ -1,10 +1,16 @@
 {
-  "version": "6.3.2",
-  "ref": "78298ed29e983ff403ec9574ce8ecb301ad58cc8",
+  "version": "6.4.0",
+  "ref": "dfd72394204488b369b6d8452ddce002199b6a25",
   "files": [
     {
-      "source": "panel/v65/app.py",
+      "source": "panel/v66/app.py",
       "target": "app.py",
+      "git_blob": "ec8f639f50f5128d37d5da1014542644a1254695",
+      "mode": "0755"
+    },
+    {
+      "source": "panel/v65/app.py",
+      "target": "statuscore.py",
       "git_blob": "8b1fa009fc66ff5739936c535119c8f79201ecbb",
       "mode": "0755"
     },
