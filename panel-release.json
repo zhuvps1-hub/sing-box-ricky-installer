@@ -1,11 +1,11 @@
 {
   "version": "6.4.0",
-  "ref": "dfd72394204488b369b6d8452ddce002199b6a25",
+  "ref": "dc554f339b596fb711b6f24041d936dfe736e206",
   "files": [
     {
       "source": "panel/v66/app.py",
       "target": "app.py",
-      "git_blob": "ec8f639f50f5128d37d5da1014542644a1254695",
+      "git_blob": "08c309be444e0531eb2c0f9cbea7e4b0861404da",
       "mode": "0755"
     },
     {
