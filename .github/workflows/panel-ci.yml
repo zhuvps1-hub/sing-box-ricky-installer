@@ -62,7 +62,7 @@ jobs:
           node --check panel/v64/web/interaction.js
           node --check panel/v65/web/refreshfix.js
           node --check panel/v67/web/autosave.js
-      - name: Assemble and self-test v6.4.2 candidate
+      - name: Assemble and self-test v6.5 candidate
         run: |
           python - <<'PY'
           import os, pathlib, shutil, subprocess, tempfile
@@ -86,6 +86,7 @@ jobs:
                   'panel/v64/web/interaction.js':'web/interaction.js',
                   'panel/v65/web/refreshfix.js':'web/refreshfix.js',
                   'panel/v67/web/autosave.js':'web/autosave.js',
+                  'panel/v67/web/autosave.css':'web/autosave.css',
               }
               for source,target in files.items():
                   shutil.copy2(source,root/target)
@@ -99,7 +100,7 @@ jobs:
                   'MOSDNS_CONFIG':str(pathlib.Path(td,'mosdns','config.yaml')),
               })
               subprocess.check_call(['python',str(root/'app.py'),'--self-test'],env=env)
-          print('v6.4.2 candidate self-test passed')
+          print('v6.5 candidate self-test passed')
           PY
       - name: Verify immutable release manifest
         run: |
