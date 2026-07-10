@@ -11,7 +11,6 @@ import threading
 import time
 import urllib.parse
 from collections import deque
-from pathlib import Path
 from typing import Any, Callable
 
 import authcore
@@ -23,6 +22,7 @@ core.VERSION = VERSION
 moscore.VERSION = VERSION
 authcore.VERSION = VERSION
 INTERACTION_JS = core.WEB_DIR / "interaction.js"
+INTERACTION_CSS = core.WEB_DIR / "interaction.css"
 
 
 class ApplyJobs:
@@ -49,7 +49,12 @@ class ApplyJobs:
             self.jobs[job_id] = job
             self.order.append(job_id)
             self.latest = job_id
-        thread = threading.Thread(target=self._run, args=(job_id, copy.deepcopy(payload), runner or core.apply_config), name=f"apply-{job_id[:6]}", daemon=True)
+        thread = threading.Thread(
+            target=self._run,
+            args=(job_id, copy.deepcopy(payload), runner or core.apply_config),
+            name=f"apply-{job_id[:6]}",
+            daemon=True,
+        )
         thread.start()
         return copy.deepcopy(job)
 
@@ -83,6 +88,8 @@ JOBS = ApplyJobs()
 
 def page_html() -> bytes:
     html = authcore.login_page().decode("utf-8")
+    if "/assets/interaction.css" not in html:
+        html = html.replace("</head>", '  <link rel="stylesheet" href="/assets/interaction.css">\n</head>', 1)
     if "/assets/interaction.js" not in html:
         html = html.replace("</body>", '  <script src="/assets/interaction.js" defer></script>\n</body>', 1)
     return html.encode("utf-8")
@@ -99,6 +106,9 @@ class Handler(authcore.Handler):
             return
         if parsed.path == "/assets/interaction.js":
             self.serve_file(INTERACTION_JS, "application/javascript; charset=utf-8")
+            return
+        if parsed.path == "/assets/interaction.css":
+            self.serve_file(INTERACTION_CSS, "text/css; charset=utf-8")
             return
         if parsed.path == "/api/apply-status":
             if not self.require():
@@ -152,6 +162,8 @@ def self_test() -> None:
         time.sleep(0.02)
         status = manager.get(job["id"])
     assert status and status["status"] == "succeeded"
+    assert b"interaction.js" in page_html()
+    assert b"interaction.css" in page_html()
     print(json.dumps({"ok": True, "version": VERSION}))
 
 
