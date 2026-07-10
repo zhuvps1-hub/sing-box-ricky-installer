@@ -31,13 +31,17 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Shell syntax
+      - name: Shell syntax and public transport
         run: |
           bash -n install-panel-stable.sh
           bash -n install-panel.sh
           bash -n install-panel-v6.sh
           bash -n install-web.sh
           bash -n install-gateway.sh
+          ! grep -q "api.github.com" install-panel-stable.sh
+          grep -q "raw.githubusercontent.com" install-panel-stable.sh
+          grep -q "cdn.jsdelivr.net" install-panel-stable.sh
+          grep -q "Git Blob" install-panel-stable.sh
       - name: Python syntax
         run: python -m py_compile panel/app.py panel/v62/app.py panel/v63/app.py panel/v64/app.py panel/v65/app.py panel/v66/app.py panel/v67/app.py
       - name: Test import JSON
@@ -58,7 +62,7 @@ jobs:
           node --check panel/v64/web/interaction.js
           node --check panel/v65/web/refreshfix.js
           node --check panel/v67/web/autosave.js
-      - name: Assemble and self-test v6.4.1 candidate
+      - name: Assemble and self-test v6.4.2 candidate
         run: |
           python - <<'PY'
           import os, pathlib, shutil, subprocess, tempfile
@@ -75,11 +79,11 @@ jobs:
                   'panel/v62/web/index.html':'web/index.html',
                   'panel/web/app.css':'web/core.css',
                   'panel/v63/web/app.css':'web/app.css',
+                  'panel/v64/web/interaction.css':'web/interaction.css',
                   'panel/web/app.js':'web/core.js',
                   'panel/v62/web/app.js':'web/app.js',
                   'panel/v63/web/remember.js':'web/remember.js',
                   'panel/v64/web/interaction.js':'web/interaction.js',
-                  'panel/v64/web/interaction.css':'web/interaction.css',
                   'panel/v65/web/refreshfix.js':'web/refreshfix.js',
                   'panel/v67/web/autosave.js':'web/autosave.js',
               }
@@ -95,7 +99,7 @@ jobs:
                   'MOSDNS_CONFIG':str(pathlib.Path(td,'mosdns','config.yaml')),
               })
               subprocess.check_call(['python',str(root/'app.py'),'--self-test'],env=env)
-          print('v6.4.1 candidate self-test passed')
+          print('v6.4.2 candidate self-test passed')
           PY
       - name: Verify immutable release manifest
         run: |
@@ -132,18 +136,16 @@ jobs:
               subprocess.check_call(['python',str(root/'app.py'),'--self-test'],env=env)
           print('release self-test passed')
           PY
-      - name: Simulate GitHub API Base64 formatting
+      - name: Simulate verified raw downloads
         run: |
           python - <<'PY'
-          import base64, hashlib, json, pathlib, subprocess, tempfile, textwrap
+          import hashlib, json, pathlib, subprocess, tempfile
           manifest=json.load(open('panel-release.json',encoding='utf-8'))
           with tempfile.TemporaryDirectory() as td:
               for item in manifest['files']:
                   data=subprocess.check_output(['git','show',f"{manifest['ref']}:{item['source']}"])
-                  wrapped='\n'.join(textwrap.wrap(base64.b64encode(data).decode(),60))
-                  decoded=base64.b64decode(''.join(wrapped.split()),validate=True)
-                  actual=hashlib.sha1(b'blob '+str(len(decoded)).encode()+b'\0'+decoded).hexdigest()
+                  actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
                   assert item['git_blob']==actual
-                  target=pathlib.Path(td,item['target']); target.parent.mkdir(parents=True,exist_ok=True); target.write_bytes(decoded)
-          print('wrapped API Base64 path verified')
+                  target=pathlib.Path(td,item['target']); target.parent.mkdir(parents=True,exist_ok=True); target.write_bytes(data)
+          print('raw download verification path passed')
           PY
