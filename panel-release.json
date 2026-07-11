@@ -1,10 +1,16 @@
 {
-  "version": "6.6.0",
-  "ref": "b8e67ef07ae9318376d3926edfe73f60329cd860",
+  "version": "6.7.0",
+  "ref": "d936665ad25ffb2ca9db20ac64b97536b697c542",
   "files": [
     {
-      "source": "panel/v68/app.py",
+      "source": "panel/v69/app.py",
       "target": "app.py",
+      "git_blob": "e1a6efbc421308123319a8538775a45290180a6d",
+      "mode": "0755"
+    },
+    {
+      "source": "panel/v68/app.py",
+      "target": "reliablecore.py",
       "git_blob": "59f1aeb1cb3af40025243a3ee3e2bf08f76099c7",
       "mode": "0755"
     },
