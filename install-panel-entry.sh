@@ -17,13 +17,18 @@ command -v python3 >/dev/null 2>&1 || die "请先安装 Python 3。"
 
 # 卸载不需要端口预检，直接交给稳定安装器处理。
 if [[ ${1:-} != uninstall ]]; then
-  PANEL_PORT="$PANEL_PORT" python3 - <<'PY'
+  HEALTH="$(curl -fsS --max-time 2 "http://127.0.0.1:${PANEL_PORT}/healthz" 2>/dev/null || true)"
+  if printf '%s' "$HEALTH" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' \
+     && printf '%s' "$HEALTH" | grep -Eq '"version"'; then
+    info "端口 ${PANEL_PORT} 已运行 iWAN Gateway，按正常升级流程处理。"
+  else
+    PANEL_PORT="$PANEL_PORT" python3 - <<'PY'
 import os
 import pathlib
 import signal
-import socket
 import sys
 import time
+import subprocess
 
 port = int(os.environ["PANEL_PORT"])
 known_services = ("iwan-gateway", "f7010u-gateway", "sing-box-panel")
@@ -33,13 +38,10 @@ known_paths = (
     "/opt/sing-box-panel/",
 )
 
-
 def service_main_pids():
     result = set()
     for name in known_services:
-        path = pathlib.Path("/run/systemd/system")
         try:
-            import subprocess
             value = subprocess.run(
                 ["systemctl", "show", "-p", "MainPID", "--value", name],
                 capture_output=True,
@@ -54,7 +56,6 @@ def service_main_pids():
             pass
     return result
 
-
 def listen_inodes():
     wanted = f"{port:04X}"
     found = set()
@@ -67,11 +68,9 @@ def listen_inodes():
             columns = line.split()
             if len(columns) < 10 or columns[3] != "0A":
                 continue
-            local = columns[1]
-            if local.rsplit(":", 1)[-1].upper() == wanted:
+            if columns[1].rsplit(":", 1)[-1].upper() == wanted:
                 found.add(columns[9])
     return found
-
 
 def owners():
     inodes = listen_inodes()
@@ -99,20 +98,6 @@ def owners():
         except (OSError, ValueError):
             continue
     return result
-
-
-def port_free():
-    for host in ("0.0.0.0", "::"):
-        family = socket.AF_INET6 if ":" in host else socket.AF_INET
-        sock = socket.socket(family, socket.SOCK_STREAM)
-        try:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind((host, port))
-        except OSError:
-            return False
-        finally:
-            sock.close()
-    return True
 
 running_service_pids = service_main_pids()
 current = owners()
@@ -166,6 +151,7 @@ if remaining:
 
 print(f"[信息] 端口 {port} 预检通过。")
 PY
+  fi
 fi
 
 PRIMARY="https://raw.githubusercontent.com/$REPO/main/install-panel-stable.sh?ts=$STAMP"
