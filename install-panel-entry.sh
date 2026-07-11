@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 REPO="zhuvps1-hub/sing-box-ricky-installer"
-PANEL_PORT="${PANEL_PORT:-8088}"
+REQUESTED_PORT="${PANEL_PORT:-8088}"
 STAMP="$(date +%s)"
 TMP="$(mktemp)"
 trap 'rm -f "$TMP"' EXIT
@@ -12,145 +12,74 @@ warn(){ printf '\033[1;33m[提示]\033[0m %s\n' "$*"; }
 die(){ printf '\033[1;31m[错误]\033[0m %s\n' "$*" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "请使用 root 用户运行。"
-[[ "$PANEL_PORT" =~ ^[0-9]+$ ]] && ((PANEL_PORT >= 1 && PANEL_PORT <= 65535)) || die "面板端口无效：$PANEL_PORT"
+[[ "$REQUESTED_PORT" =~ ^[0-9]+$ ]] && ((REQUESTED_PORT >= 1 && REQUESTED_PORT <= 65535)) || die "面板端口无效：$REQUESTED_PORT"
 command -v python3 >/dev/null 2>&1 || die "请先安装 Python 3。"
 
-# 卸载不需要端口预检，直接交给稳定安装器处理。
+SELECTED_PORT="$REQUESTED_PORT"
+
 if [[ ${1:-} != uninstall ]]; then
-  HEALTH="$(curl -fsS --max-time 2 "http://127.0.0.1:${PANEL_PORT}/healthz" 2>/dev/null || true)"
-  if printf '%s' "$HEALTH" | grep -Eq '"ok"[[:space:]]*:[[:space:]]*true' \
-     && printf '%s' "$HEALTH" | grep -Eq '"version"'; then
-    info "端口 ${PANEL_PORT} 已运行 iWAN Gateway，按正常升级流程处理。"
-  else
-    PANEL_PORT="$PANEL_PORT" python3 - <<'PY'
+  SELECTED_PORT="$(REQUESTED_PORT="$REQUESTED_PORT" python3 - <<'PY'
+import json
 import os
-import pathlib
-import signal
-import sys
-import time
-import subprocess
+import socket
+import urllib.request
 
-port = int(os.environ["PANEL_PORT"])
-known_services = ("iwan-gateway", "f7010u-gateway", "sing-box-panel")
-known_paths = (
-    "/opt/iwan-gateway-panel/",
-    "/opt/f7010u-gateway/",
-    "/opt/sing-box-panel/",
-)
+requested = int(os.environ["REQUESTED_PORT"])
 
-def service_main_pids():
-    result = set()
-    for name in known_services:
-        try:
-            value = subprocess.run(
-                ["systemctl", "show", "-p", "MainPID", "--value", name],
-                capture_output=True,
-                text=True,
-                timeout=3,
-                check=False,
-            ).stdout.strip()
-            pid = int(value or 0)
-            if pid > 0:
-                result.add(pid)
-        except Exception:
-            pass
-    return result
 
-def listen_inodes():
-    wanted = f"{port:04X}"
-    found = set()
-    for filename in ("/proc/net/tcp", "/proc/net/tcp6"):
-        try:
-            lines = pathlib.Path(filename).read_text().splitlines()[1:]
-        except OSError:
-            continue
-        for line in lines:
-            columns = line.split()
-            if len(columns) < 10 or columns[3] != "0A":
-                continue
-            if columns[1].rsplit(":", 1)[-1].upper() == wanted:
-                found.add(columns[9])
-    return found
+def is_iwan_gateway(port: int) -> bool:
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{port}/healthz",
+            headers={"User-Agent": "iwan-gateway-installer/3", "Cache-Control": "no-cache"},
+        )
+        with urllib.request.urlopen(request, timeout=1.5) as response:
+            payload = json.loads(response.read(4096).decode("utf-8"))
+        return bool(payload.get("ok")) and bool(payload.get("version"))
+    except Exception:
+        return False
 
-def owners():
-    inodes = listen_inodes()
-    result = []
-    if not inodes:
-        return result
-    for proc in pathlib.Path("/proc").iterdir():
-        if not proc.name.isdigit():
-            continue
-        try:
-            pid = int(proc.name)
-            matched = False
-            for fd in (proc / "fd").iterdir():
+
+def can_bind(port: int) -> bool:
+    sockets = []
+    try:
+        for family, host in ((socket.AF_INET, "0.0.0.0"), (socket.AF_INET6, "::")):
+            sock = socket.socket(family, socket.SOCK_STREAM)
+            sockets.append(sock)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if family == socket.AF_INET6:
                 try:
-                    target = os.readlink(fd)
+                    sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
                 except OSError:
-                    continue
-                if target.startswith("socket:[") and target[8:-1] in inodes:
-                    matched = True
-                    break
-            if not matched:
-                continue
-            raw = (proc / "cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace").strip()
-            result.append((pid, raw or "[未知命令]"))
-        except (OSError, ValueError):
-            continue
-    return result
+                    pass
+            sock.bind((host, port))
+        return True
+    except OSError:
+        return False
+    finally:
+        for sock in sockets:
+            sock.close()
 
-running_service_pids = service_main_pids()
-current = owners()
-if not current:
-    print(f"[信息] 端口 {port} 当前可用于面板。")
+
+if is_iwan_gateway(requested) or can_bind(requested):
+    print(requested)
     raise SystemExit(0)
 
-unknown = []
-stale = []
-for pid, command in current:
-    if pid in running_service_pids:
-        print(f"[信息] 端口 {port} 由现有面板服务占用，升级时会正常切换：PID {pid}")
-        continue
-    if any(marker in command for marker in known_paths):
-        stale.append((pid, command))
-    else:
-        unknown.append((pid, command))
+start = max(1024, requested + 1)
+stop = min(65535, requested + 200)
+for port in range(start, stop + 1):
+    if can_bind(port):
+        print(port)
+        raise SystemExit(0)
 
-if unknown:
-    print(f"[错误] 端口 {port} 被非 iWAN 面板程序占用，为避免误杀进程，安装已停止。", file=sys.stderr)
-    for pid, command in unknown:
-        print(f"  PID {pid}: {command}", file=sys.stderr)
-    print(f"可改用其他端口：PANEL_PORT=8090 bash <(curl -fsSL 'https://raw.githubusercontent.com/zhuvps1-hub/sing-box-ricky-installer/main/install-web.sh?ts='$(date +%s))", file=sys.stderr)
-    raise SystemExit(20)
-
-for pid, command in stale:
-    print(f"[提示] 清理旧面板残留进程 PID {pid}: {command}")
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
-
-if stale:
-    deadline = time.monotonic() + 5
-    while time.monotonic() < deadline and owners():
-        time.sleep(0.2)
-    for pid, command in owners():
-        if any(marker in command for marker in known_paths) and pid not in running_service_pids:
-            try:
-                os.kill(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-    time.sleep(0.3)
-
-remaining = [(pid, command) for pid, command in owners() if pid not in running_service_pids]
-if remaining:
-    print(f"[错误] 端口 {port} 仍被残留进程占用：", file=sys.stderr)
-    for pid, command in remaining:
-        print(f"  PID {pid}: {command}", file=sys.stderr)
-    raise SystemExit(21)
-
-print(f"[信息] 端口 {port} 预检通过。")
+raise SystemExit("无法找到可用的 Web 面板端口")
 PY
+)"
+
+  if [[ "$SELECTED_PORT" == "$REQUESTED_PORT" ]]; then
+    info "Web 面板将使用端口 $SELECTED_PORT。"
+  else
+    warn "端口 $REQUESTED_PORT 已被其他程序占用，自动改用端口 $SELECTED_PORT。"
   fi
 fi
 
@@ -158,5 +87,17 @@ PRIMARY="https://raw.githubusercontent.com/$REPO/main/install-panel-stable.sh?ts
 FALLBACK="https://cdn.jsdelivr.net/gh/$REPO@main/install-panel-stable.sh?ts=$STAMP"
 curl -fL --retry 3 --retry-delay 1 --connect-timeout 15 --max-time 120 "$PRIMARY" -o "$TMP" \
   || curl -fL --retry 3 --retry-delay 1 --connect-timeout 15 --max-time 120 "$FALLBACK" -o "$TMP"
+
 bash -n "$TMP"
-PANEL_PORT="$PANEL_PORT" bash "$TMP" "$@"
+PANEL_PORT="$SELECTED_PORT" bash "$TMP" "$@"
+
+if [[ ${1:-} != uninstall ]]; then
+  if command -v ufw >/dev/null 2>&1; then
+    ufw allow "$SELECTED_PORT/tcp" >/dev/null 2>&1 || true
+  fi
+  if command -v firewall-cmd >/dev/null 2>&1; then
+    firewall-cmd --permanent --add-port="$SELECTED_PORT/tcp" >/dev/null 2>&1 || true
+    firewall-cmd --reload >/dev/null 2>&1 || true
+  fi
+  info "面板端口：$SELECTED_PORT"
+fi
