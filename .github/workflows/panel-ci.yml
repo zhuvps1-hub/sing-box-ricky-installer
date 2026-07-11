@@ -5,21 +5,27 @@ on:
     paths:
       - "panel/**"
       - "panel-release.json"
+      - "install.sh"
       - "install-panel-stable.sh"
       - "install-panel.sh"
       - "install-panel-v6.sh"
       - "install-web.sh"
       - "install-gateway.sh"
+      - "README.md"
+      - "docs/**"
       - ".github/workflows/panel-ci.yml"
   pull_request:
     paths:
       - "panel/**"
       - "panel-release.json"
+      - "install.sh"
       - "install-panel-stable.sh"
       - "install-panel.sh"
       - "install-panel-v6.sh"
       - "install-web.sh"
       - "install-gateway.sh"
+      - "README.md"
+      - "docs/**"
 
 jobs:
   verify:
@@ -31,8 +37,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
       - name: Shell syntax and public transport
         run: |
+          bash -n install.sh
           bash -n install-panel-stable.sh
           bash -n install-panel.sh
           bash -n install-panel-v6.sh
@@ -42,18 +50,30 @@ jobs:
           grep -q "raw.githubusercontent.com" install-panel-stable.sh
           grep -q "cdn.jsdelivr.net" install-panel-stable.sh
           grep -q "Git Blob" install-panel-stable.sh
+
+      - name: Verify public neutral fresh installer
+        run: |
+          ! grep -Eqi 'hkboil|217\.116\.172\.44|HKT_PASSWORD|SG_PASSWORD|IWAN_USERNAME=.*hkl' install.sh
+          grep -q '"inbounds": \[\]' install.sh
+          grep -q '"final": "direct"' install.sh
+          grep -q 'install-web.sh' install.sh
+          grep -q '不会预设 HKT、SG、用户名或任何业务密码' install.sh
+
       - name: Python syntax
-        run: python -m py_compile panel/app.py panel/v62/app.py panel/v63/app.py panel/v64/app.py panel/v65/app.py panel/v66/app.py panel/v67/app.py panel/v68/app.py
-      - name: Test import JSON
-        run: cd panel && python tests/test_panel.py PanelTests.test_import_json_outbounds -v
-      - name: Test ss link
-        run: cd panel && python tests/test_panel.py PanelTests.test_parse_ss_link -v
-      - name: Test flat credentials
-        run: cd panel && python tests/test_panel.py PanelTests.test_patch_flat_credentials -v
-      - name: Test user credentials
-        run: cd panel && python tests/test_panel.py PanelTests.test_patch_iwan_preserves_blank_password -v
-      - name: Test password redaction
-        run: cd panel && python tests/test_panel.py PanelTests.test_public_iwan_redacts_password -v
+        run: |
+          python -m py_compile \
+            panel/app.py panel/v62/app.py panel/v63/app.py panel/v64/app.py \
+            panel/v65/app.py panel/v66/app.py panel/v67/app.py panel/v68/app.py panel/v69/app.py
+
+      - name: Core unit tests
+        run: |
+          cd panel
+          python tests/test_panel.py PanelTests.test_import_json_outbounds -v
+          python tests/test_panel.py PanelTests.test_parse_ss_link -v
+          python tests/test_panel.py PanelTests.test_patch_flat_credentials -v
+          python tests/test_panel.py PanelTests.test_patch_iwan_preserves_blank_password -v
+          python tests/test_panel.py PanelTests.test_public_iwan_redacts_password -v
+
       - name: JavaScript syntax
         run: |
           node --check panel/web/app.js
@@ -61,16 +81,17 @@ jobs:
           node --check panel/v63/web/remember.js
           node --check panel/v64/web/interaction.js
           node --check panel/v65/web/refreshfix.js
-          node --check panel/v67/web/autosave.js
           node --check panel/v68/web/autosave.js
-      - name: Assemble and self-test v6.6 candidate
+
+      - name: Assemble and self-test v6.7 candidate
         run: |
           python - <<'PY'
           import os, pathlib, shutil, subprocess, tempfile
           with tempfile.TemporaryDirectory() as td:
               root=pathlib.Path(td,'release'); (root/'web').mkdir(parents=True)
               files={
-                  'panel/v68/app.py':'app.py',
+                  'panel/v69/app.py':'app.py',
+                  'panel/v68/app.py':'reliablecore.py',
                   'panel/v67/app.py':'autosavecore.py',
                   'panel/v66/app.py':'routingcore.py',
                   'panel/v65/app.py':'statuscore.py',
@@ -82,28 +103,31 @@ jobs:
                   'panel/web/app.css':'web/core.css',
                   'panel/v63/web/app.css':'web/app.css',
                   'panel/v64/web/interaction.css':'web/interaction.css',
+                  'panel/v67/web/autosave.css':'web/autosave.css',
                   'panel/web/app.js':'web/core.js',
                   'panel/v62/web/app.js':'web/app.js',
                   'panel/v63/web/remember.js':'web/remember.js',
                   'panel/v64/web/interaction.js':'web/interaction.js',
                   'panel/v65/web/refreshfix.js':'web/refreshfix.js',
                   'panel/v68/web/autosave.js':'web/autosave.js',
-                  'panel/v67/web/autosave.css':'web/autosave.css',
               }
               for source,target in files.items():
                   shutil.copy2(source,root/target)
+              singbox=pathlib.Path(td,'sing-box.json')
+              singbox.write_text('{"log":{"level":"info"},"inbounds":[],"outbounds":[{"type":"direct","tag":"direct"}],"route":{"rules":[],"final":"direct"}}\n')
               env=os.environ.copy()
               env.update({
                   'IWAN_PANEL_CONFIG_DIR':str(pathlib.Path(td,'config')),
                   'IWAN_PANEL_DATA_DIR':str(pathlib.Path(td,'data')),
                   'SINGBOX_BACKUP_DIR':str(pathlib.Path(td,'singbox-backups')),
                   'MOSDNS_BACKUP_DIR':str(pathlib.Path(td,'mosdns-backups')),
-                  'SINGBOX_CONFIG':str(pathlib.Path(td,'sing-box.json')),
+                  'SINGBOX_CONFIG':str(singbox),
                   'MOSDNS_CONFIG':str(pathlib.Path(td,'mosdns','config.yaml')),
               })
               subprocess.check_call(['python',str(root/'app.py'),'--self-test'],env=env)
-          print('v6.6 candidate self-test passed')
+          print('v6.7 public candidate self-test passed')
           PY
+
       - name: Verify immutable release manifest
         run: |
           python - <<'PY'
@@ -111,12 +135,15 @@ jobs:
           manifest=json.load(open('panel-release.json',encoding='utf-8'))
           ref=manifest['ref']
           assert re.fullmatch(r'[0-9a-f]{40}',ref)
+          assert manifest['version']=='6.7.0'
+          assert any(x['source']=='panel/v69/app.py' and x['target']=='app.py' for x in manifest['files'])
           for item in manifest['files']:
               data=subprocess.check_output(['git','show',f"{ref}:{item['source']}"])
               actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
               assert actual == item['git_blob'], (item['source'], actual, item['git_blob'])
           print('manifest verified')
           PY
+
       - name: Assemble and self-test stable release
         run: |
           python - <<'PY'
@@ -127,18 +154,21 @@ jobs:
               for item in manifest['files']:
                   data=subprocess.check_output(['git','show',f"{manifest['ref']}:{item['source']}"])
                   target=root/item['target']; target.parent.mkdir(parents=True,exist_ok=True); target.write_bytes(data); target.chmod(int(item['mode'],8))
+              singbox=pathlib.Path(td,'sing-box.json')
+              singbox.write_text('{"inbounds":[],"outbounds":[{"type":"direct","tag":"direct"}],"route":{"rules":[],"final":"direct"}}\n')
               env=os.environ.copy()
               env.update({
                   'IWAN_PANEL_CONFIG_DIR':str(pathlib.Path(td,'config')),
                   'IWAN_PANEL_DATA_DIR':str(pathlib.Path(td,'data')),
                   'SINGBOX_BACKUP_DIR':str(pathlib.Path(td,'singbox-backups')),
                   'MOSDNS_BACKUP_DIR':str(pathlib.Path(td,'mosdns-backups')),
-                  'SINGBOX_CONFIG':str(pathlib.Path(td,'sing-box.json')),
+                  'SINGBOX_CONFIG':str(singbox),
                   'MOSDNS_CONFIG':str(pathlib.Path(td,'mosdns','config.yaml')),
               })
               subprocess.check_call(['python',str(root/'app.py'),'--self-test'],env=env)
-          print('release self-test passed')
+          print('stable release self-test passed')
           PY
+
       - name: Simulate verified raw downloads
         run: |
           python - <<'PY'
