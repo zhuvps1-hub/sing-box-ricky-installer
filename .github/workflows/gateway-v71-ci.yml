@@ -51,6 +51,9 @@ jobs:
           grep -q 'PANEL_BIND:-127.0.0.1' install-panel-v71.sh
           grep -q 'User=root' install-panel-v71.sh
           grep -q 'User=\$PANEL_USER' install-panel-v71.sh
+          grep -q 'RuntimeDirectoryMode=0755' install-panel-v71.sh
+          grep -q 'LEGACY_DIR=' install-panel-v71.sh
+          grep -q 'helper 拒绝启动' panel/gateway/entrypoint.py
           grep -q 'SO_PEERCRED' panel/gateway/helper.py
           grep -q 'FileLock' panel/gateway/helper.py
           ! grep -R 'panel/v6' panel/gateway
@@ -65,7 +68,7 @@ jobs:
           cat >"$work/manifest.json" <<'JSON'
           {
             "schema": 2,
-            "version": "7.1.0-test",
+            "version": "7.1.1-test",
             "ref": "0000000000000000000000000000000000000000",
             "files": []
           }
@@ -76,7 +79,7 @@ jobs:
           import json,sys
           path=sys.argv[1]
           value=json.load(open(path,encoding='utf-8'))
-          value['version']='7.1.0-tampered'
+          value['version']='7.1.1-tampered'
           json.dump(value,open(path,'w',encoding='utf-8'),ensure_ascii=False,indent=2)
           PY
           ! python tools/release_manifest.py verify "$work/manifest.json" "$work/public.pem"
@@ -84,14 +87,14 @@ jobs:
       - name: Build unsigned frozen manifest
         run: |
           python tools/build_release_manifest.py \
-            --version 7.1.0 \
-            --ref 215b27ba6e443e77c3a6f97b90bb285bf27f302d \
+            --version 7.1.1 \
+            --ref a8670a7dfaa3268dbfb0367873fb1e4598836dbf \
             --output /tmp/panel-release-unsigned.json
 
       - name: Upload unsigned frozen manifest
         uses: actions/upload-artifact@v4
         with:
-          name: panel-release-unsigned-v7.1.0
+          name: panel-release-unsigned-v7.1.1
           path: /tmp/panel-release-unsigned.json
           if-no-files-found: error
           retention-days: 1
