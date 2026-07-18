@@ -78,7 +78,7 @@ def main() -> None:
         core.AUTH.initialize(os.environ.get("PANEL_ADMIN_USER", "admin"), os.environ.get("PANEL_ADMIN_PASSWORD", ""))
         print("auth initialized")
         return
-    from gateway.runtime_v712 import serve
+    from gateway.runtime_v8 import serve
     serve(args.host, args.port)
 
 
