@@ -8,6 +8,9 @@ on:
       - "tests/test_gateway_v71.py"
       - "install-panel-v71.sh"
       - "tools/release_manifest.py"
+      - "release/**"
+      - "deploy/**"
+      - "docs/部署与安全-v7.1.md"
       - ".github/workflows/gateway-v71-ci.yml"
   pull_request:
     paths:
@@ -16,6 +19,9 @@ on:
       - "tests/test_gateway_v71.py"
       - "install-panel-v71.sh"
       - "tools/release_manifest.py"
+      - "release/**"
+      - "deploy/**"
+      - "docs/部署与安全-v7.1.md"
       - ".github/workflows/gateway-v71-ci.yml"
 
 jobs:
@@ -29,13 +35,49 @@ jobs:
 
       - name: Compile flat package
         run: |
-          python -m py_compile panel/iwan_compat.py panel/app.py panel/gateway/*.py
+          python -m py_compile panel/iwan_compat.py panel/app.py panel/gateway/*.py tools/release_manifest.py
 
       - name: Run v7.1 tests
         run: python -m unittest tests.test_gateway_v71 -v
 
       - name: Run standalone self-test
         run: python panel/gateway/entrypoint.py --self-test
+
+      - name: Validate installer and privilege boundary
+        run: |
+          bash -n install-panel-v71.sh
+          grep -q 'PANEL_BIND:-127.0.0.1' install-panel-v71.sh
+          grep -q 'User=root' install-panel-v71.sh
+          grep -q 'User=\$PANEL_USER' install-panel-v71.sh
+          grep -q 'SO_PEERCRED' panel/gateway/helper.py
+          grep -q 'FileLock' panel/gateway/helper.py
+          ! grep -R 'panel/v6' panel/gateway
+          ! grep -R 'subprocess' panel/gateway/runtime.py panel/gateway/application.py
+          test "$(sha256sum release/iwan-release-ed25519-public.pem | awk '{print $1}')" = "ebc439b79669d73666d10989b5dfe9438976c6f5f4f9a5064cc3ab02edbdc25e"
+
+      - name: Test Ed25519 manifest signing and tamper detection
+        run: |
+          work="$(mktemp -d)"
+          openssl genpkey -algorithm Ed25519 -out "$work/private.pem"
+          openssl pkey -in "$work/private.pem" -pubout -out "$work/public.pem"
+          cat >"$work/manifest.json" <<'JSON'
+          {
+            "schema": 2,
+            "version": "7.1.0-test",
+            "ref": "0000000000000000000000000000000000000000",
+            "files": []
+          }
+          JSON
+          python tools/release_manifest.py sign "$work/manifest.json" "$work/private.pem" --key-id ci-test
+          python tools/release_manifest.py verify "$work/manifest.json" "$work/public.pem"
+          python - "$work/manifest.json" <<'PY'
+          import json,sys
+          path=sys.argv[1]
+          value=json.load(open(path,encoding='utf-8'))
+          value['version']='7.1.0-tampered'
+          json.dump(value,open(path,'w',encoding='utf-8'),ensure_ascii=False,indent=2)
+          PY
+          ! python tools/release_manifest.py verify "$work/manifest.json" "$work/public.pem"
 
       - name: Assemble flat release without version stack
         run: |
@@ -68,11 +110,3 @@ jobs:
               assert not any(f'import {name}' in runtime or f'from {name}' in runtime for name in forbidden)
           print('flat release assembly passed')
           PY
-
-      - name: Static privilege boundary checks
-        run: |
-          grep -q 'SO_PEERCRED' panel/gateway/helper.py
-          grep -q 'FileLock' panel/gateway/helper.py
-          grep -q '127.0.0.1' panel/gateway/entrypoint.py
-          ! grep -R 'panel/v6' panel/gateway
-          ! grep -R 'subprocess' panel/gateway/runtime.py panel/gateway/application.py
