@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Iterable
 
 STATIC_FILES = [
+    ("install-panel-v71.sh", "install-panel-v71.sh", "0755"),
     ("panel/gateway/entrypoint.py", "app.py", "0755"),
     ("panel/app.py", "core.py", "0644"),
     ("panel/iwan_compat.py", "iwan_compat.py", "0644"),
