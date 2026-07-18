@@ -3,8 +3,8 @@ set -Eeuo pipefail
 umask 077
 
 REPO="${REPO:-zhuvps1-hub/sing-box-ricky-installer}"
-INSTALLER_REF="215b27ba6e443e77c3a6f97b90bb285bf27f302d"
-INSTALLER_SHA256="167f0ae0b3e5f23ccf4d75cc1676c7fe90c633a577998d3dae2f9d55cb8e1835"
+INSTALLER_REF="a8670a7dfaa3268dbfb0367873fb1e4598836dbf"
+INSTALLER_SHA256="61a2a06d93fef092c34a80a2e28f6e6e17466a33e9ddf58fd905742d61d5021b"
 RAW_BASE="${RAW_BASE:-https://raw.githubusercontent.com}"
 JSDELIVR_BASE="${JSDELIVR_BASE:-https://cdn.jsdelivr.net/gh}"
 
@@ -30,7 +30,7 @@ trap 'rm -f "$temporary"' EXIT
 raw_url="${RAW_BASE%/}/${REPO}/${INSTALLER_REF}/install-panel-v71.sh"
 cdn_url="${JSDELIVR_BASE%/}/${REPO}@${INSTALLER_REF}/install-panel-v71.sh"
 
-log "下载固定提交 ${INSTALLER_REF:0:12} 的 v7.1 安装器"
+log "下载固定提交 ${INSTALLER_REF:0:12} 的 v7.1.1 安装器"
 if ! curl -fsSL --retry 3 --connect-timeout 10 "$raw_url" -o "$temporary"; then
   curl -fsSL --retry 3 --connect-timeout 10 "$cdn_url" -o "$temporary"
 fi
