@@ -10,21 +10,15 @@ from pathlib import Path
 from typing import Iterable
 
 STATIC_FILES = [
-    ("install-panel-v71.sh", "install-panel-v71.sh", "0755"),
+    ("install-panel-v712.sh", "install-panel-v71.sh", "0755"),
     ("panel/gateway/entrypoint.py", "app.py", "0755"),
     ("panel/app.py", "core.py", "0644"),
     ("panel/iwan_compat.py", "iwan_compat.py", "0644"),
-    ("panel/v62/web/index.html", "web/index.html", "0644"),
-    ("panel/web/app.css", "web/core.css", "0644"),
-    ("panel/v63/web/app.css", "web/app.css", "0644"),
-    ("panel/v64/web/interaction.css", "web/interaction.css", "0644"),
-    ("panel/v67/web/autosave.css", "web/autosave.css", "0644"),
-    ("panel/web/app.js", "web/core.js", "0644"),
-    ("panel/v62/web/app.js", "web/app.js", "0644"),
-    ("panel/v63/web/remember.js", "web/remember.js", "0644"),
-    ("panel/v64/web/interaction.js", "web/interaction.js", "0644"),
-    ("panel/v65/web/refreshfix.js", "web/refreshfix.js", "0644"),
-    ("panel/v68/web/autosave.js", "web/autosave.js", "0644"),
+    ("panel/web/index.html", "web/index.html", "0644"),
+    ("panel/web/app.css", "web/app.css", "0644"),
+    ("panel/web/app.js", "web/app.js", "0644"),
+    ("panel/web/remember.css", "web/remember.css", "0644"),
+    ("panel/web/remember.js", "web/remember.js", "0644"),
 ]
 
 
@@ -81,7 +75,7 @@ def build(root: Path, version: str, ref: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path("."))
-    parser.add_argument("--version", default="7.1.1")
+    parser.add_argument("--version", default="7.1.2")
     parser.add_argument("--ref", required=True)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
