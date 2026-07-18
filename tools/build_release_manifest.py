@@ -81,7 +81,7 @@ def build(root: Path, version: str, ref: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path("."))
-    parser.add_argument("--version", default="7.1.0")
+    parser.add_argument("--version", default="7.1.1")
     parser.add_argument("--ref", required=True)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
