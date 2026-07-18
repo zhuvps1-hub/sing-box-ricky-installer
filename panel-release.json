@@ -1,12 +1,18 @@
 {
-  "version": "6.7.0",
-  "ref": "d936665ad25ffb2ca9db20ac64b97536b697c542",
+  "version": "7.0.1",
+  "ref": "e077c376ea4bf2f688541cd340ba0616a3f0aaa1",
   "files": [
     {
-      "source": "panel/v69/app.py",
+      "source": "panel/v70/app.py",
       "target": "app.py",
-      "git_blob": "e1a6efbc421308123319a8538775a45290180a6d",
+      "git_blob": "69e5f2c4ca08063322eb93411aa5e57224783216",
       "mode": "0755"
+    },
+    {
+      "source": "panel/iwan_compat.py",
+      "target": "iwan_compat.py",
+      "git_blob": "7db8b687509786fd3d148a2f1942b96c2a8b3527",
+      "mode": "0644"
     },
     {
       "source": "panel/v68/app.py",
