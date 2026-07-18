@@ -1,0 +1,78 @@
+name: gateway-v71
+
+on:
+  push:
+    paths:
+      - "panel/gateway/**"
+      - "panel/iwan_compat.py"
+      - "tests/test_gateway_v71.py"
+      - "install-panel-v71.sh"
+      - "tools/release_manifest.py"
+      - ".github/workflows/gateway-v71-ci.yml"
+  pull_request:
+    paths:
+      - "panel/gateway/**"
+      - "panel/iwan_compat.py"
+      - "tests/test_gateway_v71.py"
+      - "install-panel-v71.sh"
+      - "tools/release_manifest.py"
+      - ".github/workflows/gateway-v71-ci.yml"
+
+jobs:
+  architecture:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile flat package
+        run: |
+          python -m py_compile panel/iwan_compat.py panel/app.py panel/gateway/*.py
+
+      - name: Run v7.1 tests
+        run: python -m unittest tests.test_gateway_v71 -v
+
+      - name: Run standalone self-test
+        run: python panel/gateway/entrypoint.py --self-test
+
+      - name: Assemble flat release without version stack
+        run: |
+          python - <<'PY'
+          import pathlib, shutil, subprocess, tempfile
+          with tempfile.TemporaryDirectory() as td:
+              root=pathlib.Path(td)
+              shutil.copy2('panel/gateway/entrypoint.py',root/'app.py')
+              shutil.copy2('panel/app.py',root/'core.py')
+              shutil.copy2('panel/iwan_compat.py',root/'iwan_compat.py')
+              shutil.copytree('panel/gateway',root/'gateway')
+              web=root/'web'; web.mkdir()
+              sources={
+                'panel/v62/web/index.html':'index.html',
+                'panel/web/app.css':'core.css',
+                'panel/v63/web/app.css':'app.css',
+                'panel/v64/web/interaction.css':'interaction.css',
+                'panel/v67/web/autosave.css':'autosave.css',
+                'panel/web/app.js':'core.js',
+                'panel/v62/web/app.js':'app.js',
+                'panel/v63/web/remember.js':'remember.js',
+                'panel/v64/web/interaction.js':'interaction.js',
+                'panel/v65/web/refreshfix.js':'refreshfix.js',
+                'panel/v68/web/autosave.js':'autosave.js',
+              }
+              for source,target in sources.items(): shutil.copy2(source,web/target)
+              subprocess.check_call(['python',str(root/'app.py'),'--self-test'])
+              forbidden=('reliablecore','autosavecore','routingcore','statuscore','interactioncore','authcore','moscore')
+              runtime='\n'.join(path.read_text() for path in (root/'gateway').glob('*.py'))
+              assert not any(f'import {name}' in runtime or f'from {name}' in runtime for name in forbidden)
+          print('flat release assembly passed')
+          PY
+
+      - name: Static privilege boundary checks
+        run: |
+          grep -q 'SO_PEERCRED' panel/gateway/helper.py
+          grep -q 'FileLock' panel/gateway/helper.py
+          grep -q '127.0.0.1' panel/gateway/entrypoint.py
+          ! grep -R 'panel/v6' panel/gateway
+          ! grep -R 'subprocess' panel/gateway/runtime.py panel/gateway/application.py
