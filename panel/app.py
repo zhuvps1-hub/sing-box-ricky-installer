@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-VERSION = "6.1.0"
+VERSION = "7.0.0"
 APP_DIR = Path(__file__).resolve().parent
 WEB_DIR = APP_DIR / "web"
 CONFIG_DIR = Path(os.environ.get("IWAN_PANEL_CONFIG_DIR", "/etc/iwan-gateway"))
@@ -53,6 +53,16 @@ TELEGRAM_CIDRS = [
     "91.108.4.0/22", "91.108.8.0/22", "91.108.12.0/22", "91.108.16.0/22", "91.108.20.0/22", "91.108.56.0/22", "149.154.160.0/20",
     "2001:b28:f23d::/48", "2001:b28:f23f::/48", "2001:67c:4e8::/48", "2001:b28:f23c::/48",
 ]
+
+DEFAULT_IWAN_INBOUND = {
+    "type": "iwan",
+    "tag": "iwan-in",
+    "listen": "::",
+    "listen_port": 8000,
+    "address_pool": "10.10.10.0/24",
+    "mtu": 1400,
+}
+ROUTE_CATEGORIES = ("netflix", "ai", "youtube", "telegram")
 
 
 def ensure_dirs() -> None:
@@ -437,7 +447,7 @@ def validate_node(node: dict[str, Any]) -> dict[str, Any]:
 
 def managed_rules(mappings: dict[str, str]) -> list[dict[str, Any]]:
     rules: list[dict[str, Any]] = []
-    for category in ("netflix", "ai", "youtube", "telegram"):
+    for category in ROUTE_CATEGORIES:
         outbound = str(mappings.get(category, "")).strip()
         if not outbound:
             continue
@@ -446,6 +456,52 @@ def managed_rules(mappings: dict[str, str]) -> list[dict[str, Any]]:
             rule["ip_cidr"] = TELEGRAM_CIDRS
         rules.append(rule)
     return rules
+
+
+def normalize_payload(payload: dict[str, Any], current_nodes: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Validate a browser payload and return normalized nodes/routes/iWAN data."""
+    nodes = []
+    seen: set[str] = set()
+    for raw_node in payload.get("nodes", []):
+        node = validate_node(raw_node)
+        if node["tag"] in seen:
+            raise ValueError(f"节点标签重复：{node['tag']}")
+        seen.add(node["tag"])
+        old = current_nodes.get(node["tag"], {})
+        if "password" not in node:
+            if old.get("password"):
+                node["password"] = old["password"]
+            else:
+                raise ValueError(f"节点 {node['tag']} 需要密码")
+        nodes.append(node)
+
+    deleted = {str(value) for value in payload.get("deleted_tags", [])}
+    available_tags = {tag for tag in current_nodes if tag not in deleted} | seen | {"direct"}
+    mappings = {category: str(payload.get("mappings", {}).get(category, "")).strip() for category in ROUTE_CATEGORIES}
+    default = str(payload.get("default", "")).strip()
+    requested = {value for value in mappings.values() if value} | ({default} if default else set())
+    missing = sorted(requested - available_tags)
+    if missing:
+        raise ValueError("分流出口不存在：" + ", ".join(missing))
+    conflict = sorted(deleted & requested)
+    if conflict:
+        raise ValueError("以下节点仍被分流使用：" + ", ".join(conflict))
+    return {"nodes": nodes, "deleted": deleted, "mappings": mappings, "default": default, "iwan": payload.get("iwan") if isinstance(payload.get("iwan"), dict) else {}}
+
+
+def upsert_iwan_inbound(config: dict[str, Any], iwan_patch: dict[str, Any]) -> None:
+    """Patch existing iWAN inbound or create a safe public-version default."""
+    inbounds = config.setdefault("inbounds", [])
+    if not isinstance(inbounds, list):
+        raise ValueError("inbounds 格式无效")
+    target = next((item for item in inbounds if is_iwan_inbound(item)), None)
+    if target is None:
+        target = copy.deepcopy(DEFAULT_IWAN_INBOUND)
+        inbounds.insert(0, target)
+    for key in ("listen", "listen_port", "address", "address_pool", "mtu"):
+        if key in iwan_patch and iwan_patch[key] not in (None, ""):
+            target[key] = iwan_patch[key]
+    patch_iwan_credentials(target, str(iwan_patch.get("username", "")), str(iwan_patch.get("password", "")))
 
 
 def patch_iwan_credentials(item: dict[str, Any], username: str, password: str) -> None:
@@ -504,14 +560,9 @@ def apply_config(payload: dict[str, Any]) -> tuple[bool, str]:
         for item in outbounds
         if isinstance(item, dict) and item.get("type") == "shadowsocks"
     }
-    for raw_node in payload.get("nodes", []):
-        node = validate_node(raw_node)
+    plan = normalize_payload(payload, existing_by_tag)
+    for node in plan["nodes"]:
         old = existing_by_tag.get(node["tag"], {})
-        if "password" not in node:
-            if old.get("password"):
-                node["password"] = old["password"]
-            else:
-                raise ValueError(f"节点 {node['tag']} 需要密码")
         if old:
             index = outbounds.index(old)
             merged = copy.deepcopy(old)
@@ -520,30 +571,15 @@ def apply_config(payload: dict[str, Any]) -> tuple[bool, str]:
         else:
             outbounds.append(node)
 
-    deleted = {str(value) for value in payload.get("deleted_tags", [])}
+    deleted = plan["deleted"]
     if deleted:
-        in_use = {str(value) for value in payload.get("mappings", {}).values()} | {str(payload.get("default", ""))}
-        conflict = sorted(deleted & in_use)
-        if conflict:
-            raise ValueError("以下节点仍被分流使用：" + ", ".join(conflict))
         new_config["outbounds"] = [
             item for item in outbounds
             if not (isinstance(item, dict) and item.get("type") == "shadowsocks" and str(item.get("tag")) in deleted)
         ]
 
-    iwan_patch = payload.get("iwan")
-    if isinstance(iwan_patch, dict) and iwan_patch:
-        found = False
-        for item in new_config.get("inbounds", []):
-            if is_iwan_inbound(item):
-                found = True
-                for key in ("listen", "listen_port", "address", "address_pool", "mtu"):
-                    if key in iwan_patch and iwan_patch[key] not in (None, ""):
-                        item[key] = iwan_patch[key]
-                patch_iwan_credentials(item, str(iwan_patch.get("username", "")), str(iwan_patch.get("password", "")))
-                break
-        if not found:
-            raise ValueError("未识别到 iWAN inbound")
+    if plan["iwan"]:
+        upsert_iwan_inbound(new_config, plan["iwan"])
 
     old_managed = read_json(MANAGED_FILE, {"rules": []}).get("rules", [])
     route = new_config.setdefault("route", {})
@@ -551,10 +587,10 @@ def apply_config(payload: dict[str, Any]) -> tuple[bool, str]:
     if not isinstance(rules, list):
         return False, "route.rules 格式无效"
     rules = [rule for rule in rules if rule not in old_managed]
-    new_rules = managed_rules(payload.get("mappings", {}))
+    new_rules = managed_rules(plan["mappings"])
     route["rules"] = new_rules + rules
-    if payload.get("default"):
-        route["final"] = str(payload["default"])
+    if plan["default"]:
+        route["final"] = plan["default"]
 
     ensure_dirs()
     stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -711,6 +747,30 @@ def node_latency(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return results
 
 
+def diagnostics() -> dict[str, Any]:
+    config = sample_config()
+    checks = [
+        {"name": "sing-box 配置文件", "ok": SINGBOX_CONFIG.exists(), "detail": str(SINGBOX_CONFIG)},
+        {"name": "iWAN inbound", "ok": bool(config.get("iwan")), "detail": "未配置时可在 iWAN 页面首次保存自动创建"},
+        {"name": "落地节点", "ok": bool(config.get("nodes")), "detail": f"{len(config.get('nodes', []))} 个 Shadowsocks 节点"},
+        {"name": "默认出口", "ok": bool(config.get("default")), "detail": config.get("default") or "未设置"},
+        {"name": "mosdns 配置", "ok": MOSDNS_CONFIG.exists(), "detail": str(MOSDNS_CONFIG)},
+    ]
+    for service in ("sing-box", "mosdns", "iwan-gateway"):
+        checks.append({"name": f"{service} 服务", "ok": service_active(service), "detail": "systemd active"})
+    score = round(100 * sum(1 for item in checks if item["ok"]) / max(1, len(checks)))
+    next_steps = []
+    if not config.get("iwan"):
+        next_steps.append("打开 iWAN 页面填写账号和密码，然后保存并应用。")
+    if not config.get("nodes"):
+        next_steps.append("打开节点页面导入自己的 ss:// 或 sing-box outbounds。")
+    if not config.get("default"):
+        next_steps.append("在分流页面选择“其他流量”的默认出口。")
+    if not next_steps:
+        next_steps.append("配置完整，可按需测速节点或查看日志排障。")
+    return {"score": score, "checks": checks, "next_steps": next_steps}
+
+
 def cookie_token(headers: Any) -> str:
     cookie = http.cookies.SimpleCookie()
     try:
@@ -806,6 +866,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if path == "/api/config":
             self.json(200, {"ok": True, **sample_config()})
+            return
+        if path == "/api/diagnostics":
+            self.json(200, {"ok": True, **diagnostics()})
             return
         if path == "/api/logs":
             query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)

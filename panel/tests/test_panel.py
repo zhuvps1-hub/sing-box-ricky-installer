@@ -57,6 +57,12 @@ class PanelTests(unittest.TestCase):
         self.assertEqual(inbound['username'], 'new')
         self.assertEqual(inbound['password'], 'updated')
 
+    def test_normalize_payload_rejects_missing_route_target(self):
+        with self.assertRaises(ValueError):
+            self.panel.normalize_payload(
+                {'nodes': [], 'mappings': {'netflix': 'missing'}, 'default': 'direct', 'deleted_tags': []},
+                {},
+            )
 
 if __name__ == '__main__':
     unittest.main()

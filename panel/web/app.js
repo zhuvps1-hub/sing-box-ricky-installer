@@ -299,6 +299,19 @@ async function importNodes() {
 async function loadLogs() { try { $('#logsText').textContent = '读取中…'; const data = await api(`/api/logs?service=${encodeURIComponent($('#logService').value)}`); $('#logsText').textContent = data.logs || '暂无日志'; } catch (error) { $('#logsText').textContent = error.message; } }
 async function loadNetwork() { try { $('#networkText').textContent = '读取中…'; const data = await api('/api/network'); $('#networkText').textContent = `[路由]\n${data.routes}\n\n[监听端口]\n${data.ports}`; } catch (error) { $('#networkText').textContent = error.message; } }
 
+async function loadDiagnostics() {
+  const box = $('#diagnosticsBox');
+  box.innerHTML = '<div class="hint">体检中…</div>';
+  try {
+    const data = await api('/api/diagnostics', {}, 8000);
+    const checks = data.checks.map(item => `<li class="${item.ok ? 'ok' : 'warn'}"><b>${item.ok ? '✓' : '!'}</b><span>${escapeHtml(item.name)}</span><em>${escapeHtml(item.detail)}</em></li>`).join('');
+    const steps = data.next_steps.map(step => `<li>${escapeHtml(step)}</li>`).join('');
+    box.innerHTML = `<div class="health-score"><strong>${data.score}</strong><span>完整度</span></div><ul class="check-list">${checks}</ul><div class="next-steps"><b>建议</b><ol>${steps}</ol></div>`;
+  } catch (error) {
+    box.innerHTML = `<div class="error-text">${escapeHtml(error.message)}</div>`;
+  }
+}
+
 async function boot() { setTheme(localStorage.getItem('iwan-theme') || 'system'); try { const session = await api('/api/session'); if (!session.authenticated) { showLogin(); return; } state.csrf = session.csrf; showApp(); await Promise.all([loadConfig(), loadDashboard()]); } catch { showLogin(); } }
 
 $('#loginForm').addEventListener('submit', async event => { event.preventDefault(); try { const data = await api('/api/login', { method: 'POST', body: JSON.stringify({ username: $('#loginUser').value, password: $('#loginPass').value }) }); state.csrf = data.csrf; showApp(); await Promise.all([loadConfig(), loadDashboard()]); } catch (error) { $('#loginError').textContent = error.message; } });
@@ -317,6 +330,7 @@ $('#openImportBtn').onclick = () => { $('#importText').value = ''; $('#importRes
 $('#closeNodeDialog').onclick = $('#cancelNodeBtn').onclick = () => $('#nodeDialog').close(); $('#closeImportDialog').onclick = $('#cancelImportBtn').onclick = () => $('#importDialog').close();
 $('#nodeForm').addEventListener('submit', event => { event.preventDefault(); const index = Number($('#nodeIndex').value); const node = { tag: $('#nodeTag').value.trim(), server: $('#nodeServer').value.trim(), server_port: Number($('#nodePort').value), method: $('#nodeMethod').value, password: $('#nodePassword').value, plugin: $('#nodePlugin').value.trim(), plugin_opts: $('#nodePluginOpts').value.trim() }; if (index < 0) state.nodes.push(node); else state.nodes[index] = { ...state.nodes[index], ...node }; $('#nodeDialog').close(); setDirty(); renderNodes(); renderRouteForm(); });
 $('#importForm').addEventListener('submit', event => { event.preventDefault(); importNodes(); }); $('#loadLogsBtn').onclick = loadLogs; $('#loadNetworkBtn').onclick = loadNetwork;
+$('#diagnoseBtn').onclick = loadDiagnostics;
 setInterval(() => { if (!document.hidden && $('#page-dashboard').classList.contains('active') && !state.saving) loadDashboard({ silent: true }); }, 15000);
 window.addEventListener('beforeunload', event => { if (state.dirty && !state.saving) { event.preventDefault(); event.returnValue = ''; } });
 boot();

@@ -1,4 +1,4 @@
-# iWAN Gateway v6.7
+# iWAN Gateway v7.0
 
 面向公众的轻量 iWAN、sing-box 多落地分流和 mosdns Web 管理方案。
 
@@ -74,10 +74,12 @@ bash <(curl -fsSL "https://raw.githubusercontent.com/zhuvps1-hub/sing-box-ricky-
 
 ## 公开版设计
 
+- 只保留一个面向公众的高质量稳定版本；
 - 初始 sing-box 配置只有 `direct`；
 - 新机器自动安装 mosdns 并生成可直接使用的默认配置；
 - 不写死任何用户名、服务器、端口或密码；
 - 首次保存 iWAN 设置时自动创建 inbound；
+- 首页提供公众版体检，直接显示配置完整度、服务状态和下一步建议；
 - 节点支持手动新增、`ss://`、JSON 和 sing-box `outbounds` 导入；
 - Netflix、ChatGPT/Claude/Gemini、YouTube、Telegram、其他流量独立选择出口；
 - 节点和分流可靠自动保存；
