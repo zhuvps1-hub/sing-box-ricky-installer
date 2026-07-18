@@ -8,6 +8,7 @@ on:
       - "tests/test_gateway_v71.py"
       - "install-panel-v71.sh"
       - "tools/release_manifest.py"
+      - "tools/build_release_manifest.py"
       - "release/**"
       - "deploy/**"
       - "docs/部署与安全-v7.1.md"
@@ -19,6 +20,7 @@ on:
       - "tests/test_gateway_v71.py"
       - "install-panel-v71.sh"
       - "tools/release_manifest.py"
+      - "tools/build_release_manifest.py"
       - "release/**"
       - "deploy/**"
       - "docs/部署与安全-v7.1.md"
@@ -35,7 +37,7 @@ jobs:
 
       - name: Compile flat package
         run: |
-          python -m py_compile panel/iwan_compat.py panel/app.py panel/gateway/*.py tools/release_manifest.py
+          python -m py_compile panel/iwan_compat.py panel/app.py panel/gateway/*.py tools/release_manifest.py tools/build_release_manifest.py
 
       - name: Run v7.1 tests
         run: python -m unittest tests.test_gateway_v71 -v
@@ -78,6 +80,17 @@ jobs:
           json.dump(value,open(path,'w',encoding='utf-8'),ensure_ascii=False,indent=2)
           PY
           ! python tools/release_manifest.py verify "$work/manifest.json" "$work/public.pem"
+
+      - name: Build unsigned frozen manifest
+        run: |
+          python tools/build_release_manifest.py \
+            --version 7.1.0 \
+            --ref 215b27ba6e443e77c3a6f97b90bb285bf27f302d \
+            --output /tmp/panel-release-unsigned.json
+          echo MANIFEST_BASE64_BEGIN
+          base64 -w0 /tmp/panel-release-unsigned.json
+          echo
+          echo MANIFEST_BASE64_END
 
       - name: Assemble flat release without version stack
         run: |
