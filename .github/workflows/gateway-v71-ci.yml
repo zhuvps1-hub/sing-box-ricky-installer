@@ -4,9 +4,12 @@ on:
   push:
     paths:
       - "panel/gateway/**"
+      - "panel/web/**"
       - "panel/iwan_compat.py"
       - "tests/test_gateway_v71.py"
+      - "tests/test_gateway_v712.py"
       - "install-panel-v71.sh"
+      - "install-panel-v712.sh"
       - "tools/release_manifest.py"
       - "tools/build_release_manifest.py"
       - "release/**"
@@ -16,9 +19,12 @@ on:
   pull_request:
     paths:
       - "panel/gateway/**"
+      - "panel/web/**"
       - "panel/iwan_compat.py"
       - "tests/test_gateway_v71.py"
+      - "tests/test_gateway_v712.py"
       - "install-panel-v71.sh"
+      - "install-panel-v712.sh"
       - "tools/release_manifest.py"
       - "tools/build_release_manifest.py"
       - "release/**"
@@ -38,9 +44,13 @@ jobs:
       - name: Compile flat package
         run: |
           python -m py_compile panel/iwan_compat.py panel/app.py panel/gateway/*.py tools/release_manifest.py tools/build_release_manifest.py
+          node --check panel/web/app.js
+          node --check panel/web/remember.js
 
-      - name: Run v7.1 tests
-        run: python -m unittest tests.test_gateway_v71 -v
+      - name: Run v7 tests
+        run: |
+          python -m unittest tests.test_gateway_v71 -v
+          python -m unittest tests.test_gateway_v712 -v
 
       - name: Run standalone self-test
         run: python panel/gateway/entrypoint.py --self-test
@@ -48,16 +58,22 @@ jobs:
       - name: Validate installer and privilege boundary
         run: |
           bash -n install-panel-v71.sh
-          grep -q 'PANEL_BIND:-127.0.0.1' install-panel-v71.sh
+          bash -n install-panel-v712.sh
+          grep -q 'PANEL_BIND:-0.0.0.0' install-panel-v712.sh
+          grep -q 'IWAN_ALLOW_PUBLIC_BIND:-1' install-panel-v712.sh
+          grep -q 'chown -R "$PANEL_USER:$PANEL_GROUP" "$DATA_DIR"' install-panel-v712.sh
+          grep -q 'ufw allow "${PANEL_PORT}/tcp"' install-panel-v712.sh
           grep -q 'User=root' install-panel-v71.sh
           grep -q 'User=\$PANEL_USER' install-panel-v71.sh
           grep -q 'RuntimeDirectoryMode=0755' install-panel-v71.sh
           grep -q 'LEGACY_DIR=' install-panel-v71.sh
+          grep -q 'runtime_v712' panel/gateway/entrypoint.py
           grep -q 'helper 拒绝启动' panel/gateway/entrypoint.py
           grep -q 'SO_PEERCRED' panel/gateway/helper.py
           grep -q 'FileLock' panel/gateway/helper.py
+          grep -q 'iwan_remember' panel/gateway/runtime_v712.py
           ! grep -R 'panel/v6' panel/gateway
-          ! grep -R 'subprocess' panel/gateway/runtime.py panel/gateway/application.py
+          ! grep -R 'subprocess' panel/gateway/runtime.py panel/gateway/runtime_v712.py panel/gateway/application.py
           test "$(sha256sum release/iwan-release-ed25519-public.pem | awk '{print $1}')" = "ebc439b79669d73666d10989b5dfe9438976c6f5f4f9a5064cc3ab02edbdc25e"
 
       - name: Test Ed25519 manifest signing and tamper detection
@@ -68,7 +84,7 @@ jobs:
           cat >"$work/manifest.json" <<'JSON'
           {
             "schema": 2,
-            "version": "7.1.1-test",
+            "version": "7.1.2-test",
             "ref": "0000000000000000000000000000000000000000",
             "files": []
           }
@@ -79,27 +95,27 @@ jobs:
           import json,sys
           path=sys.argv[1]
           value=json.load(open(path,encoding='utf-8'))
-          value['version']='7.1.1-tampered'
+          value['version']='7.1.2-tampered'
           json.dump(value,open(path,'w',encoding='utf-8'),ensure_ascii=False,indent=2)
           PY
           ! python tools/release_manifest.py verify "$work/manifest.json" "$work/public.pem"
 
-      - name: Build unsigned frozen manifest
+      - name: Build unsigned candidate manifest
         run: |
           python tools/build_release_manifest.py \
-            --version 7.1.1 \
-            --ref a8670a7dfaa3268dbfb0367873fb1e4598836dbf \
+            --version 7.1.2 \
+            --ref "$GITHUB_SHA" \
             --output /tmp/panel-release-unsigned.json
 
-      - name: Upload unsigned frozen manifest
+      - name: Upload unsigned candidate manifest
         uses: actions/upload-artifact@v4
         with:
-          name: panel-release-unsigned-v7.1.1
+          name: panel-release-unsigned-v7.1.2
           path: /tmp/panel-release-unsigned.json
           if-no-files-found: error
           retention-days: 1
 
-      - name: Assemble flat release without version stack
+      - name: Assemble unified flat release
         run: |
           python - <<'PY'
           import pathlib, shutil, subprocess, tempfile
@@ -111,22 +127,19 @@ jobs:
               shutil.copytree('panel/gateway',root/'gateway')
               web=root/'web'; web.mkdir()
               sources={
-                'panel/v62/web/index.html':'index.html',
-                'panel/web/app.css':'core.css',
-                'panel/v63/web/app.css':'app.css',
-                'panel/v64/web/interaction.css':'interaction.css',
-                'panel/v67/web/autosave.css':'autosave.css',
-                'panel/web/app.js':'core.js',
-                'panel/v62/web/app.js':'app.js',
-                'panel/v63/web/remember.js':'remember.js',
-                'panel/v64/web/interaction.js':'interaction.js',
-                'panel/v65/web/refreshfix.js':'refreshfix.js',
-                'panel/v68/web/autosave.js':'autosave.js',
+                'panel/web/index.html':'index.html',
+                'panel/web/app.css':'app.css',
+                'panel/web/app.js':'app.js',
+                'panel/web/remember.css':'remember.css',
+                'panel/web/remember.js':'remember.js',
               }
               for source,target in sources.items(): shutil.copy2(source,web/target)
+              html=(web/'index.html').read_text(encoding='utf-8')
+              assert '/assets/app.css' in html and '/assets/app.js' in html
+              assert not any('panel/v6' in source for source in sources)
               subprocess.check_call(['python',str(root/'app.py'),'--self-test'])
               forbidden=('reliablecore','autosavecore','routingcore','statuscore','interactioncore','authcore','moscore')
               runtime='\n'.join(path.read_text() for path in (root/'gateway').glob('*.py'))
               assert not any(f'import {name}' in runtime or f'from {name}' in runtime for name in forbidden)
-          print('flat release assembly passed')
+          print('unified flat release assembly passed')
           PY

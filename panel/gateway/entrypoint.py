@@ -56,7 +56,7 @@ def _self_test() -> None:
 def main() -> None:
     _prepare_path()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host", default=os.environ.get("PANEL_BIND", "127.0.0.1"))
+    parser.add_argument("--host", default=os.environ.get("PANEL_BIND", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("PANEL_PORT", "8088")))
     parser.add_argument("--helper", action="store_true")
     parser.add_argument("--init-auth", action="store_true")
@@ -78,7 +78,7 @@ def main() -> None:
         core.AUTH.initialize(os.environ.get("PANEL_ADMIN_USER", "admin"), os.environ.get("PANEL_ADMIN_PASSWORD", ""))
         print("auth initialized")
         return
-    from gateway.runtime import serve
+    from gateway.runtime_v712 import serve
     serve(args.host, args.port)
 
 
