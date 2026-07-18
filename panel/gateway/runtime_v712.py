@@ -42,7 +42,10 @@ def _remember_secret() -> bytes:
     try:
         descriptor = os.open(REMEMBER_KEY, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:
-        return REMEMBER_KEY.read_bytes()
+        existing = REMEMBER_KEY.read_bytes()
+        if len(existing) < 32:
+            raise OSError("remember.key 长度无效")
+        return existing
     try:
         os.write(descriptor, data)
         os.fsync(descriptor)
@@ -184,13 +187,18 @@ class Handler(base.Handler):
                 return
             secure = base._secure_cookie(self)
             remember = data.get("remember") is True
-            cookies: list[str] = [_cookie_line("iwan_session", first, 12 * 3600, secure)]
-            csrf = second
             if remember:
                 persistent, csrf = _create_remember_token(username)
-                cookies.append(_cookie_line(REMEMBER_COOKIE, persistent, REMEMBER_TTL, secure))
+                cookies = [
+                    _cookie_line("iwan_session", "", 0, secure),
+                    _cookie_line(REMEMBER_COOKIE, persistent, REMEMBER_TTL, secure),
+                ]
             else:
-                cookies.append(_cookie_line(REMEMBER_COOKIE, "", 0, secure))
+                csrf = second
+                cookies = [
+                    _cookie_line("iwan_session", first, 12 * 3600, secure),
+                    _cookie_line(REMEMBER_COOKIE, "", 0, secure),
+                ]
             self.json(200, {"ok": True, "csrf": csrf, "remembered": remember}, {"Set-Cookie": cookies})
             return
 
@@ -203,8 +211,9 @@ class Handler(base.Handler):
             auth = self.require(mutate=True)
             if not auth:
                 return
-            token, _ = auth
-            core.AUTH.logout(token)
+            token, session = auth
+            if not session.get("remembered"):
+                core.AUTH.logout(token)
             secure = base._secure_cookie(self)
             cookies = [
                 _cookie_line("iwan_session", "", 0, secure),
