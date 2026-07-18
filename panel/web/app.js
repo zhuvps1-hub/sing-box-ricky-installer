@@ -2,7 +2,7 @@
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-const state = { csrf: '', config: null, nodes: [], deleted: new Set(), dirty: false, latency: {}, saving: false };
+const state = { csrf: '', config: null, nodes: [], deleted: new Set(), dirty: false, latency: {}, saving: false, dashboardLoading: false, dashboardAbort: null };
 const pageMeta = {
   dashboard: ['首页', '实时采样现有服务'],
   nodes: ['节点', '新增、导入和测速'],
@@ -24,6 +24,9 @@ function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
 async function api(path, options = {}, timeoutMs = 15000) {
   const controller = new AbortController();
+  const upstreamSignal = options.signal;
+  const relayAbort = () => controller.abort();
+  if (upstreamSignal) upstreamSignal.addEventListener('abort', relayAbort, { once: true });
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   options.headers = { ...(options.headers || {}), 'Content-Type': 'application/json' };
   if (options.method && options.method !== 'GET') options.headers['X-CSRF-Token'] = state.csrf;
@@ -39,10 +42,14 @@ async function api(path, options = {}, timeoutMs = 15000) {
     if (!response.ok || data.ok === false) throw new Error(data.error || data.message || `HTTP ${response.status}`);
     return data;
   } catch (error) {
-    if (error?.name === 'AbortError') throw new Error('请求超时');
+    if (error?.name === 'AbortError') {
+      if (upstreamSignal?.aborted) throw error;
+      throw new Error('请求超时');
+    }
     throw error;
   } finally {
     clearTimeout(timer);
+    if (upstreamSignal) upstreamSignal.removeEventListener('abort', relayAbort);
   }
 }
 
@@ -122,11 +129,13 @@ function renderRouteSummary(config) {
 
 function drawChart(history) {
   const canvas = $('#trafficChart');
+  if (!canvas || !canvas.isConnected) return;
   const context = canvas.getContext('2d');
   const ratio = devicePixelRatio || 1;
   const width = canvas.clientWidth || 600;
   const height = canvas.clientHeight || 220;
-  canvas.width = width * ratio; canvas.height = height * ratio; context.scale(ratio, ratio); context.clearRect(0, 0, width, height);
+  if (canvas.width !== width * ratio || canvas.height !== height * ratio) { canvas.width = width * ratio; canvas.height = height * ratio; }
+  context.setTransform(ratio, 0, 0, ratio, 0, 0); context.clearRect(0, 0, width, height);
   context.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--line'); context.lineWidth = 1;
   for (let index = 1; index < 4; index += 1) { context.beginPath(); context.moveTo(0, height * index / 4); context.lineTo(width, height * index / 4); context.stroke(); }
   const values = (history || []).slice(-80); const maximum = Math.max(1, ...values.flatMap(item => [item.up, item.down]));
@@ -138,9 +147,13 @@ function drawChart(history) {
   line('down', '#2f8cf5'); line('up', '#17b67a');
 }
 
-async function loadDashboard() {
+async function loadDashboard({ silent = false } = {}) {
+  if (state.dashboardLoading) state.dashboardAbort?.abort();
+  state.dashboardLoading = true;
+  state.dashboardAbort = new AbortController();
+  $$('[data-refresh]').forEach(button => { button.disabled = true; });
   try {
-    const data = await api('/api/dashboard');
+    const data = await api('/api/dashboard', { signal: state.dashboardAbort.signal }, 12000);
     $('#versionText').textContent = `v${data.version}`;
     servicePill('#pillIwan', !!data.config.iwan && data.services['sing-box']); servicePill('#pillSing', data.services['sing-box']); servicePill('#pillMos', data.services.mosdns);
     $('#iwanState').textContent = data.config.iwan ? '已识别' : '未识别'; $('#iwanPort').textContent = data.config.iwan.listen_port || '—'; $('#iwanPool').textContent = `地址池 ${data.config.iwan.address_pool || data.config.iwan.address || '—'}`;
@@ -149,7 +162,8 @@ async function loadDashboard() {
     $('#cpuText').textContent = `${data.system.cpu}%`; $('#memText').textContent = `${data.system.memory}%`; $('#cpuBar').style.width = `${data.system.cpu}%`; $('#memBar').style.width = `${data.system.memory}%`;
     $('#uptimeText').textContent = fmtUptime(data.system.uptime); $('#uploadText').textContent = formatBytes(data.system.upload_bps, true); $('#downloadText').textContent = formatBytes(data.system.download_bps, true); $('#totalText').textContent = formatBytes(data.system.total_bytes);
     renderRouteSummary(data.config); drawChart(data.history);
-  } catch (error) { toast(error.message, true); }
+  } catch (error) { if (error?.name !== 'AbortError' && !silent) toast(error.message, true); }
+  finally { state.dashboardLoading = false; $$('[data-refresh]').forEach(button => { button.disabled = false; }); }
 }
 
 async function loadConfig(resetDirty = true) {
@@ -199,7 +213,13 @@ function openNode(index = -1) {
 }
 
 function deleteNode(index) { const node = state.nodes[index]; if (!confirm(`删除节点 ${node.tag}？保存前不会影响当前配置。`)) return; state.deleted.add(node.tag); state.nodes.splice(index, 1); setDirty(); renderNodes(); renderRouteForm(); }
-function page(name) { $$('.page').forEach(element => element.classList.toggle('active', element.id === `page-${name}`)); $$('[data-page]').forEach(element => element.classList.toggle('active', element.dataset.page === name)); $('#pageTitle').textContent = pageMeta[name][0]; $('#pageSub').textContent = pageMeta[name][1]; }
+function page(name) {
+  if (!pageMeta[name]) return;
+  $$('.page').forEach(element => element.classList.toggle('active', element.id === `page-${name}`));
+  $$('[data-page]').forEach(element => element.classList.toggle('active', element.dataset.page === name));
+  $('#pageTitle').textContent = pageMeta[name][0]; $('#pageSub').textContent = pageMeta[name][1];
+  if (name === 'dashboard') loadDashboard({ silent: true });
+}
 
 function desiredPayload() {
   const mappings = {}; $$('[data-route]').forEach(select => { if (select.dataset.route !== 'default') mappings[select.dataset.route] = select.value; });
@@ -255,7 +275,15 @@ async function save() {
   } finally { endSaving(); }
 }
 
-async function action(actionName, service = '') { try { const data = await api('/api/action', { method: 'POST', body: JSON.stringify({ action: actionName, service }) }, 25000); toast(data.message || '完成'); setTimeout(loadDashboard, 800); } catch (error) { toast(error.message, true); } }
+async function action(actionName, service = '', trigger = null) {
+  try {
+    if (trigger) trigger.disabled = true;
+    const data = await api('/api/action', { method: 'POST', body: JSON.stringify({ action: actionName, service }) }, 25000);
+    toast(data.message || '完成');
+    setTimeout(() => loadDashboard({ silent: true }), 800);
+  } catch (error) { toast(error.message, true); }
+  finally { if (trigger) trigger.disabled = false; }
+}
 async function testNodes() { try { $('#testNodesBtn').disabled = true; const data = await api('/api/latency', { method: 'POST', body: JSON.stringify({ nodes: state.nodes }) }, 30000); state.latency = Object.fromEntries(data.results.map(result => [result.tag, result])); renderNodes(); toast('测速完成'); } catch (error) { toast(error.message, true); } finally { $('#testNodesBtn').disabled = false; } }
 
 async function importNodes() {
@@ -275,15 +303,20 @@ async function boot() { setTheme(localStorage.getItem('iwan-theme') || 'system')
 
 $('#loginForm').addEventListener('submit', async event => { event.preventDefault(); try { const data = await api('/api/login', { method: 'POST', body: JSON.stringify({ username: $('#loginUser').value, password: $('#loginPass').value }) }); state.csrf = data.csrf; showApp(); await Promise.all([loadConfig(), loadDashboard()]); } catch (error) { $('#loginError').textContent = error.message; } });
 $('#themeSelect').onchange = event => setTheme(event.target.value);
-$$('[data-page]').forEach(button => { button.onclick = () => page(button.dataset.page); });
-$$('[data-refresh]').forEach(button => { button.onclick = loadDashboard; });
-$$('[data-action]').forEach(button => { button.onclick = () => action(button.dataset.action, button.dataset.service || ''); });
+document.addEventListener('click', event => {
+  const pageButton = event.target.closest('[data-page]');
+  if (pageButton) { page(pageButton.dataset.page); return; }
+  const refreshButton = event.target.closest('[data-refresh]');
+  if (refreshButton) { loadDashboard(); return; }
+  const actionButton = event.target.closest('[data-action]');
+  if (actionButton) action(actionButton.dataset.action, actionButton.dataset.service || '', actionButton);
+});
 $('#logoutBtn').onclick = async () => { try { await api('/api/logout', { method: 'POST', body: '{}' }); } finally { showLogin(); } };
 $('#saveBtn').onclick = save; $('#addNodeBtn').onclick = () => openNode(); $('#testNodesBtn').onclick = testNodes;
 $('#openImportBtn').onclick = () => { $('#importText').value = ''; $('#importResult').textContent = ''; $('#importDialog').showModal(); };
 $('#closeNodeDialog').onclick = $('#cancelNodeBtn').onclick = () => $('#nodeDialog').close(); $('#closeImportDialog').onclick = $('#cancelImportBtn').onclick = () => $('#importDialog').close();
 $('#nodeForm').addEventListener('submit', event => { event.preventDefault(); const index = Number($('#nodeIndex').value); const node = { tag: $('#nodeTag').value.trim(), server: $('#nodeServer').value.trim(), server_port: Number($('#nodePort').value), method: $('#nodeMethod').value, password: $('#nodePassword').value, plugin: $('#nodePlugin').value.trim(), plugin_opts: $('#nodePluginOpts').value.trim() }; if (index < 0) state.nodes.push(node); else state.nodes[index] = { ...state.nodes[index], ...node }; $('#nodeDialog').close(); setDirty(); renderNodes(); renderRouteForm(); });
 $('#importForm').addEventListener('submit', event => { event.preventDefault(); importNodes(); }); $('#loadLogsBtn').onclick = loadLogs; $('#loadNetworkBtn').onclick = loadNetwork;
-setInterval(() => { if (!document.hidden && $('#page-dashboard').classList.contains('active') && !state.saving) loadDashboard(); }, 15000);
+setInterval(() => { if (!document.hidden && $('#page-dashboard').classList.contains('active') && !state.saving) loadDashboard({ silent: true }); }, 15000);
 window.addEventListener('beforeunload', event => { if (state.dirty && !state.saving) { event.preventDefault(); event.returnValue = ''; } });
 boot();
