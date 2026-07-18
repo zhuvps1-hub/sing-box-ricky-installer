@@ -1,0 +1,30 @@
+# 将 panel.example.com 替换为你的面板域名。
+# DNS 必须先解析到此服务器，防火墙只开放 80/443，不开放 8088。
+panel.example.com {
+    encode zstd gzip
+
+    reverse_proxy 127.0.0.1:8088 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "no-referrer"
+        Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/iwan-gateway-access.log {
+            roll_size 20MiB
+            roll_keep 5
+            roll_keep_for 168h
+        }
+        format json
+    }
+}

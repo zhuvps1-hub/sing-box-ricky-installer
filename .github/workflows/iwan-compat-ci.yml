@@ -1,0 +1,33 @@
+name: iWAN schema compatibility
+
+on:
+  pull_request:
+    paths:
+      - 'panel/iwan_compat.py'
+      - 'panel/v70/app.py'
+      - 'tests/test_iwan_compat.py'
+      - '.github/workflows/iwan-compat-ci.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'panel/iwan_compat.py'
+      - 'panel/v70/app.py'
+      - 'tests/test_iwan_compat.py'
+      - '.github/workflows/iwan-compat-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Compile compatibility layer and release wrapper
+        run: python -m py_compile panel/iwan_compat.py panel/v70/app.py
+      - name: Run iWAN schema regression tests
+        run: python tests/test_iwan_compat.py
