@@ -63,11 +63,14 @@ jobs:
           ! grep -q "api.github.com" install-panel-stable.sh
           grep -q "raw.githubusercontent.com" install-panel-stable.sh
           grep -q "cdn.jsdelivr.net" install-panel-stable.sh
-          grep -q "INSTALLER_REF=\"215b27ba6e443e77c3a6f97b90bb285bf27f302d\"" install-panel-stable.sh
-          grep -q "INSTALLER_SHA256=\"167f0ae0b3e5f23ccf4d75cc1676c7fe90c633a577998d3dae2f9d55cb8e1835\"" install-panel-stable.sh
+          grep -q "INSTALLER_REF=\"a8670a7dfaa3268dbfb0367873fb1e4598836dbf\"" install-panel-stable.sh
+          grep -q "INSTALLER_SHA256=\"61a2a06d93fef092c34a80a2e28f6e6e17466a33e9ddf58fd905742d61d5021b\"" install-panel-stable.sh
           grep -q "pkeyutl" install-panel-v71.sh
           grep -q -- "--rollback" install-panel-v71.sh
           grep -q "PANEL_BIND:-127.0.0.1" install-panel-v71.sh
+          grep -q "RuntimeDirectoryMode=0755" install-panel-v71.sh
+          grep -q "LEGACY_DIR=" install-panel-v71.sh
+          grep -q "helper 拒绝启动" panel/gateway/entrypoint.py
 
       - name: Verify public neutral fresh installer
         run: |
@@ -109,7 +112,7 @@ jobs:
           node --check panel/v65/web/refreshfix.js
           node --check panel/v68/web/autosave.js
 
-      - name: Assemble and self-test flat v7.1 candidate
+      - name: Assemble and self-test flat v7.1.1 candidate
         run: |
           python - <<'PY'
           import pathlib, shutil, subprocess, tempfile
@@ -138,7 +141,7 @@ jobs:
               forbidden=('reliablecore','autosavecore','routingcore','statuscore','interactioncore','authcore','moscore')
               runtime='\n'.join(path.read_text(encoding='utf-8') for path in (root/'gateway').glob('*.py'))
               assert not any(f'import {name}' in runtime or f'from {name}' in runtime for name in forbidden)
-          print('flat v7.1 candidate self-test passed')
+          print('flat v7.1.1 candidate self-test passed')
           PY
 
       - name: Verify signed immutable release manifest
@@ -149,8 +152,8 @@ jobs:
           manifest=json.load(open('panel-release.json',encoding='utf-8'))
           ref=manifest['ref']; files=manifest['files']
           assert manifest['schema']==2
-          assert manifest['version']=='7.1.0'
-          assert ref=='215b27ba6e443e77c3a6f97b90bb285bf27f302d'
+          assert manifest['version']=='7.1.1'
+          assert ref=='a8670a7dfaa3268dbfb0367873fb1e4598836dbf'
           assert manifest['architecture']=='flat-package+root-helper'
           assert isinstance(files,list) and 20 <= len(files) <= 40
           assert len({item['target'] for item in files}) == len(files)
