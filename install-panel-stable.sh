@@ -3,8 +3,8 @@ set -Eeuo pipefail
 umask 077
 
 REPO="${REPO:-zhuvps1-hub/sing-box-ricky-installer}"
-INSTALLER_REF="a8670a7dfaa3268dbfb0367873fb1e4598836dbf"
-INSTALLER_SHA256="61a2a06d93fef092c34a80a2e28f6e6e17466a33e9ddf58fd905742d61d5021b"
+INSTALLER_REF="7f8fd3dce1ea6b94d860ca5040f5a695f825dbe8"
+INSTALLER_SHA256="9bcd87ef9a244de5c5b0a4490b64b68d19354908c41c49bb03cc2796fd016db0"
 RAW_BASE="${RAW_BASE:-https://raw.githubusercontent.com}"
 JSDELIVR_BASE="${JSDELIVR_BASE:-https://cdn.jsdelivr.net/gh}"
 
@@ -25,17 +25,18 @@ fi
 command -v curl >/dev/null 2>&1 || die "缺少 curl"
 command -v sha256sum >/dev/null 2>&1 || die "缺少 sha256sum"
 
-temporary="$(mktemp /tmp/install-panel-v71.XXXXXX.sh)"
+temporary="$(mktemp /tmp/install-panel-v712.XXXXXX.sh)"
 trap 'rm -f "$temporary"' EXIT
-raw_url="${RAW_BASE%/}/${REPO}/${INSTALLER_REF}/install-panel-v71.sh"
-cdn_url="${JSDELIVR_BASE%/}/${REPO}@${INSTALLER_REF}/install-panel-v71.sh"
+raw_url="${RAW_BASE%/}/${REPO}/${INSTALLER_REF}/install-panel-v712.sh"
+cdn_url="${JSDELIVR_BASE%/}/${REPO}@${INSTALLER_REF}/install-panel-v712.sh"
 
-log "下载固定提交 ${INSTALLER_REF:0:12} 的 v7.1.1 安装器"
+log "下载固定提交 ${INSTALLER_REF:0:12} 的 v7.1.2 安装器"
 if ! curl -fsSL --retry 3 --connect-timeout 10 "$raw_url" -o "$temporary"; then
   curl -fsSL --retry 3 --connect-timeout 10 "$cdn_url" -o "$temporary"
 fi
 actual="$(sha256sum "$temporary" | awk '{print $1}')"
 [[ "$actual" == "$INSTALLER_SHA256" ]] || die "安装器 SHA-256 校验失败：期望 $INSTALLER_SHA256，实际 $actual"
 chmod 0700 "$temporary"
-log "安装器校验通过，进入签名发布安装流程"
+log "安装器校验通过，进入 v7.1.2 签名发布安装流程"
+export IWAN_INSTALLER_REF="$INSTALLER_REF"
 exec bash "$temporary" "$@"
