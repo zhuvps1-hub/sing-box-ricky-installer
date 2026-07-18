@@ -8,6 +8,7 @@ PUBLIC_KEY_URL="${PUBLIC_KEY_URL:-https://raw.githubusercontent.com/${REPO}/main
 PUBLIC_KEY_SHA256="ebc439b79669d73666d10989b5dfe9438976c6f5f4f9a5064cc3ab02edbdc25e"
 INSTALL_ROOT="${INSTALL_ROOT:-/opt/iwan-gateway}"
 RELEASES_DIR="${INSTALL_ROOT}/releases"
+LEGACY_DIR="${INSTALL_ROOT}/legacy"
 CURRENT_LINK="${INSTALL_ROOT}/current"
 CONFIG_DIR="${IWAN_PANEL_CONFIG_DIR:-/etc/iwan-gateway}"
 DATA_DIR="${IWAN_PANEL_DATA_DIR:-/var/lib/iwan-gateway}"
@@ -37,21 +38,54 @@ health_check(){
   return 1
 }
 
+latest_legacy_snapshot(){
+  [[ -d "$LEGACY_DIR" ]] || return 1
+  find "$LEGACY_DIR" -mindepth 1 -maxdepth 1 -type d -name 'legacy-*' -printf '%T@ %p\n' \
+    | sort -rn | head -n1 | cut -d' ' -f2-
+}
+
+restore_legacy(){
+  local snapshot="$1"
+  [[ -f "$snapshot/iwan-gateway.service" ]] || die "旧版服务快照无效：$snapshot"
+  log "恢复旧版面板服务快照 $(basename "$snapshot")"
+  systemctl disable --now iwan-gateway-helper.service >/dev/null 2>&1 || true
+  cp -a "$snapshot/iwan-gateway.service" /etc/systemd/system/iwan-gateway.service
+  rm -f /etc/systemd/system/iwan-gateway-helper.service
+  rm -rf /etc/systemd/system/iwan-gateway.service.d
+  if [[ -d "$snapshot/iwan-gateway.service.d" ]]; then
+    cp -a "$snapshot/iwan-gateway.service.d" /etc/systemd/system/iwan-gateway.service.d
+  fi
+  systemctl daemon-reload
+  systemctl enable iwan-gateway.service >/dev/null 2>&1 || true
+  systemctl restart iwan-gateway.service
+  systemctl is-active --quiet iwan-gateway.service || die "旧版服务恢复后未进入 active 状态"
+  log "已恢复旧版面板；新架构文件、配置备份和审计数据均保留。"
+}
+
 rollback(){
   require_root
-  install -d -m 0755 "$RELEASES_DIR"
-  local requested="${1:-}" current="" target=""
+  install -d -m 0755 "$RELEASES_DIR" "$LEGACY_DIR"
+  local requested="${1:-}" current="" target="" legacy=""
   [[ -L "$CURRENT_LINK" ]] && current="$(readlink -f "$CURRENT_LINK")"
+  if [[ -n "$requested" && -d "$LEGACY_DIR/$requested" ]]; then
+    restore_legacy "$LEGACY_DIR/$requested"
+    return
+  fi
   if [[ -n "$requested" ]]; then
     target="${RELEASES_DIR}/${requested}"
-    [[ -d "$target" ]] || die "未找到发布版本：$requested"
+    [[ -d "$target" ]] || die "未找到发布版本或旧版快照：$requested"
   else
     while IFS= read -r candidate; do
       [[ -d "$candidate" && "$candidate" != "$current" ]] || continue
       target="$candidate"; break
     done < <(find "$RELEASES_DIR" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -rn | cut -d' ' -f2-)
   fi
-  [[ -n "$target" ]] || die "没有可回滚的历史发布"
+  if [[ -z "$target" ]]; then
+    legacy="$(latest_legacy_snapshot || true)"
+    [[ -n "$legacy" ]] || die "没有可回滚的历史发布或旧版快照"
+    restore_legacy "$legacy"
+    return
+  fi
   atomic_link "$target"
   systemctl daemon-reload
   systemctl restart iwan-gateway-helper.service
@@ -122,15 +156,18 @@ RELEASE_ID="${VERSION}-${REF:0:12}"
 RELEASE_DIR="${RELEASES_DIR}/${RELEASE_ID}"
 
 python3 - "$MANIFEST" >"$LIST" <<'PY'
-import base64,json,posixpath,sys
+import base64,json,sys
 m=json.load(open(sys.argv[1],encoding='utf-8'))
 files=m.get('files')
 if not isinstance(files,list) or not files: raise SystemExit('files invalid')
+seen=set()
 for item in files:
     source=str(item.get('source','')); target=str(item.get('target',''))
     sha=str(item.get('sha256','')); blob=str(item.get('git_blob','')); mode=str(item.get('mode','0644'))
     for value in (source,target):
         if not value or value.startswith('/') or '\\' in value or '..' in value.split('/'): raise SystemExit(f'unsafe path: {value}')
+    if target in seen: raise SystemExit(f'duplicate target: {target}')
+    seen.add(target)
     if len(sha)!=64 or any(c not in '0123456789abcdef' for c in sha): raise SystemExit(f'sha256 invalid: {target}')
     if blob and (len(blob)!=40 or any(c not in '0123456789abcdef' for c in blob)): raise SystemExit(f'git blob invalid: {target}')
     if mode not in {'0644','0755'}: raise SystemExit(f'mode invalid: {target}')
@@ -168,9 +205,27 @@ python3 "$STAGE/app.py" --self-test >/dev/null
 
 getent group "$PANEL_GROUP" >/dev/null || groupadd --system "$PANEL_GROUP"
 id -u "$PANEL_USER" >/dev/null 2>&1 || useradd --system --gid "$PANEL_GROUP" --home-dir "$DATA_DIR" --shell /usr/sbin/nologin "$PANEL_USER"
-install -d -m 0755 "$INSTALL_ROOT" "$RELEASES_DIR"
+install -d -m 0755 "$INSTALL_ROOT" "$RELEASES_DIR" "$LEGACY_DIR"
 install -d -o "$PANEL_USER" -g "$PANEL_GROUP" -m 0750 "$CONFIG_DIR" "$DATA_DIR"
 install -d -o root -g root -m 0700 /etc/sing-box/backups /etc/mosdns/backups
+
+LEGACY_SNAPSHOT=""
+if [[ ! -L "$CURRENT_LINK" ]]; then
+  OLD_UNIT_PATH="$(systemctl show -p FragmentPath --value iwan-gateway.service 2>/dev/null || true)"
+  if [[ -n "$OLD_UNIT_PATH" && -f "$OLD_UNIT_PATH" ]]; then
+    LEGACY_SNAPSHOT="$LEGACY_DIR/legacy-$(date +%Y%m%d-%H%M%S)"
+    install -d -m 0700 "$LEGACY_SNAPSHOT"
+    cp -a "$OLD_UNIT_PATH" "$LEGACY_SNAPSHOT/iwan-gateway.service"
+    if [[ -d /etc/systemd/system/iwan-gateway.service.d ]]; then
+      cp -a /etc/systemd/system/iwan-gateway.service.d "$LEGACY_SNAPSHOT/iwan-gateway.service.d"
+    fi
+    systemctl is-active --quiet iwan-gateway.service && printf 'active\n' >"$LEGACY_SNAPSHOT/previous-state" || printf 'inactive\n' >"$LEGACY_SNAPSHOT/previous-state"
+    if [[ -L /opt/iwan-gateway-panel/current ]]; then
+      readlink -f /opt/iwan-gateway-panel/current >"$LEGACY_SNAPSHOT/previous-current"
+    fi
+    log "已保存旧版服务快照：$(basename "$LEGACY_SNAPSHOT")"
+  fi
+fi
 
 if [[ ! -d "$RELEASE_DIR" ]]; then
   install -d -m 0755 "$RELEASE_DIR"
@@ -180,6 +235,7 @@ if [[ ! -d "$RELEASE_DIR" ]]; then
 fi
 OLD_TARGET=""
 [[ -L "$CURRENT_LINK" ]] && OLD_TARGET="$(readlink -f "$CURRENT_LINK")"
+[[ "$OLD_TARGET" == "$RELEASE_DIR" ]] && OLD_TARGET=""
 atomic_link "$RELEASE_DIR"
 
 cat >"$CONFIG_DIR/gateway.env" <<EOF
@@ -219,7 +275,7 @@ ExecStart=/usr/bin/python3 $CURRENT_LINK/app.py --helper
 Restart=on-failure
 RestartSec=2
 RuntimeDirectory=iwan-gateway
-RuntimeDirectoryMode=0750
+RuntimeDirectoryMode=0755
 UMask=0007
 NoNewPrivileges=yes
 PrivateTmp=yes
@@ -301,15 +357,17 @@ systemctl restart iwan-gateway.service
 if ! health_check; then
   journalctl -u iwan-gateway-helper.service -u iwan-gateway.service -n 120 --no-pager >&2 || true
   if [[ -n "$OLD_TARGET" && -d "$OLD_TARGET" ]]; then
-    log "新版本启动失败，自动回滚"
+    log "新版本启动失败，自动回滚到上一新架构版本"
     atomic_link "$OLD_TARGET"
     systemctl restart iwan-gateway-helper.service || true
     systemctl restart iwan-gateway.service || true
+  elif [[ -n "$LEGACY_SNAPSHOT" && -d "$LEGACY_SNAPSHOT" ]]; then
+    log "新架构首次升级失败，自动恢复旧版服务"
+    restore_legacy "$LEGACY_SNAPSHOT" || true
   fi
   die "安装后健康检查失败"
 fi
 
-# 仅保留当前版本与最近 5 个历史版本。
 CURRENT_REAL="$(readlink -f "$CURRENT_LINK")"
 count=0
 while IFS= read -r candidate; do
@@ -323,6 +381,9 @@ log "v${VERSION} 安装/升级完成"
 log "面板仅监听 http://${PANEL_BIND}:${PANEL_PORT}"
 log "公网访问请使用 Caddy/Nginx HTTPS 反向代理到 127.0.0.1:${PANEL_PORT}，不要直接开放 8088。"
 log "回滚命令：bash install-panel-v71.sh --rollback"
+if [[ -n "$LEGACY_SNAPSHOT" ]]; then
+  log "首次升级旧版快照：$(basename "$LEGACY_SNAPSHOT")"
+fi
 if [[ "${GENERATED_PASSWORD:-0}" == 1 ]]; then
   printf '\n管理员：%s\n一次性随机密码：%s\n请立即保存并登录后更换。\n' "$PANEL_ADMIN_USER" "$PANEL_ADMIN_PASSWORD"
 fi
