@@ -56,6 +56,28 @@ class PanelTests(unittest.TestCase):
         self.assertEqual(config["outbounds"][1]["server"], "sg2.example.com")
         self.assertEqual(config["outbounds"][1]["password"], "secret")
 
+    @mock.patch.object(app, "service_restart", return_value=(True, ""))
+    @mock.patch.object(app, "service_active", return_value=True)
+    @mock.patch.object(app, "run", return_value=(0, ""))
+    def test_apply_config_creates_iwan_for_public_first_run(self, *_):
+        Path(os.environ["SINGBOX_CONFIG"]).write_text(json.dumps({
+            "inbounds": [],
+            "outbounds": [{"type": "direct", "tag": "direct"}],
+            "route": {"rules": [], "final": "direct"}
+        }), encoding="utf-8")
+        ok, message = app.apply_config({
+            "nodes": [],
+            "mappings": {},
+            "default": "direct",
+            "iwan": {"listen_port": 8100, "username": "alice", "password": "password123"},
+            "deleted_tags": []
+        })
+        self.assertTrue(ok, message)
+        config = json.loads(Path(os.environ["SINGBOX_CONFIG"]).read_text())
+        self.assertEqual(config["inbounds"][0]["type"], "iwan")
+        self.assertEqual(config["inbounds"][0]["listen_port"], 8100)
+        self.assertEqual(config["inbounds"][0]["users"][0]["username"], "alice")
+
 
 if __name__ == "__main__":
     unittest.main()
