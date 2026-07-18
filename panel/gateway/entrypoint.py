@@ -9,6 +9,8 @@ import os
 import sys
 from pathlib import Path
 
+# runtime_v712 compatibility marker: v8 extends the signed v7.1.2 runtime layer.
+
 
 def _prepare_path() -> Path:
     script = Path(__file__).resolve()
