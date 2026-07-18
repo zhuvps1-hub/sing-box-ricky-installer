@@ -1,132 +1,244 @@
 {
-  "version": "7.0.1",
-  "ref": "33108e3fa5f89b34e2eabbffd2f0752d1579bb2d",
+  "schema": 2,
+  "product": "iwan-gateway-panel",
+  "version": "7.1.0",
+  "ref": "215b27ba6e443e77c3a6f97b90bb285bf27f302d",
+  "architecture": "flat-package+root-helper",
+  "minimum_python": "3.11",
+  "release_key": {
+    "algorithm": "ed25519",
+    "key_id": "iwan-release-2026-01",
+    "public_key_sha256": "ebc439b79669d73666d10989b5dfe9438976c6f5f4f9a5064cc3ab02edbdc25e"
+  },
   "files": [
     {
-      "source": "panel/v70/app.py",
+      "source": "install-panel-v71.sh",
+      "target": "install-panel-v71.sh",
+      "mode": "0755",
+      "size": 12839,
+      "sha256": "167f0ae0b3e5f23ccf4d75cc1676c7fe90c633a577998d3dae2f9d55cb8e1835",
+      "git_blob": "fc49bb6f2eaf8a1b7ab0c3033c42088ac8c365e1"
+    },
+    {
+      "source": "panel/gateway/entrypoint.py",
       "target": "app.py",
-      "git_blob": "69e5f2c4ca08063322eb93411aa5e57224783216",
-      "mode": "0755"
-    },
-    {
-      "source": "panel/iwan_compat.py",
-      "target": "iwan_compat.py",
-      "git_blob": "7db8b687509786fd3d148a2f1942b96c2a8b3527",
-      "mode": "0644"
-    },
-    {
-      "source": "panel/v68/app.py",
-      "target": "reliablecore.py",
-      "git_blob": "59f1aeb1cb3af40025243a3ee3e2bf08f76099c7",
-      "mode": "0755"
-    },
-    {
-      "source": "panel/v67/app.py",
-      "target": "autosavecore.py",
-      "git_blob": "6d44dcba11ba97a6a27a4dafdff7ed3a186deeee",
-      "mode": "0755"
-    },
-    {
-      "source": "panel/v66/app.py",
-      "target": "routingcore.py",
-      "git_blob": "83b783cef2e99d43450b74c46fca7902fd7c317c",
-      "mode": "0755"
-    },
-    {
-      "source": "panel/v65/app.py",
-      "target": "statuscore.py",
-      "git_blob": "8b1fa009fc66ff5739936c535119c8f79201ecbb",
-      "mode": "0755"
-    },
-    {
-      "source": "panel/v64/app.py",
-      "target": "interactioncore.py",
-      "git_blob": "04eb278bb863163868e341bf17bbd17e25fdd92a",
-      "mode": "0755"
-    },
-    {
-      "source": "panel/v63/app.py",
-      "target": "authcore.py",
-      "git_blob": "7621a830acf579a8d2e8c24b81849ef04bbcaf76",
-      "mode": "0755"
-    },
-    {
-      "source": "panel/v62/app.py",
-      "target": "moscore.py",
-      "git_blob": "6eeb5ab92af6ed9fe7b69b71c814e5c1108048a7",
-      "mode": "0755"
+      "mode": "0755",
+      "size": 3006,
+      "sha256": "ef459c446a5fb5b332a1c193a646671febd3e6c74c0f9ff2a8713e3ef56bbcbb",
+      "git_blob": "f6ec81faa858065c6a897bf685e43896050fe426"
     },
     {
       "source": "panel/app.py",
       "target": "core.py",
-      "git_blob": "f197dffc9456775a44a0319d233f8cf8796e6dd6",
-      "mode": "0755"
+      "mode": "0644",
+      "size": 40642,
+      "sha256": "8593df6fc4dc5f2976258b305aeafd6ee56a0cb930153afc00a7ec10d88f5175",
+      "git_blob": "cd4b9f7a4bbe03a53e25f3110c05350579c04a33"
+    },
+    {
+      "source": "panel/iwan_compat.py",
+      "target": "iwan_compat.py",
+      "mode": "0644",
+      "size": 5516,
+      "sha256": "9fb191250a21215f083e85ae4c32ea37a84cb56dbd6edc5aa26feab67d0dff2b",
+      "git_blob": "7db8b687509786fd3d148a2f1942b96c2a8b3527"
     },
     {
       "source": "panel/v62/web/index.html",
       "target": "web/index.html",
-      "git_blob": "f72b9e103b4738febc506d561a873b848f82343e",
-      "mode": "0644"
+      "mode": "0644",
+      "size": 13037,
+      "sha256": "cf1676ddd7c0bf2c7b23f082b4158871320a6740f1bcbf0746a30b51e76a5c5b",
+      "git_blob": "f72b9e103b4738febc506d561a873b848f82343e"
     },
     {
       "source": "panel/web/app.css",
       "target": "web/core.css",
-      "git_blob": "98ca0fe98d39d479f40b22d5d1252b1f3c0fe9fb",
-      "mode": "0644"
+      "mode": "0644",
+      "size": 16390,
+      "sha256": "063fcb6d6d7c68a548f3b178c4fbfa747f33213817bcf502d6c411f887d95df4",
+      "git_blob": "2398feacdceae893b50eb3ef16bfed29b08898ff"
     },
     {
       "source": "panel/v63/web/app.css",
       "target": "web/app.css",
-      "git_blob": "96eb1bd3c4eff9602e3fcb6d39c36be09e318d42",
-      "mode": "0644"
+      "mode": "0644",
+      "size": 2007,
+      "sha256": "c98857ab958402a77606e6a35fcbd980f6af7445aacec14cc26964433e7f398c",
+      "git_blob": "96eb1bd3c4eff9602e3fcb6d39c36be09e318d42"
     },
     {
       "source": "panel/v64/web/interaction.css",
       "target": "web/interaction.css",
-      "git_blob": "a2e35ef6a624a71ab9b50c8267bf20538bf37d24",
-      "mode": "0644"
+      "mode": "0644",
+      "size": 3474,
+      "sha256": "f3c315777aff102ec28c9309ccb0664cdd5539ae1d892f2600a323c9dfa28426",
+      "git_blob": "a2e35ef6a624a71ab9b50c8267bf20538bf37d24"
     },
     {
       "source": "panel/v67/web/autosave.css",
       "target": "web/autosave.css",
-      "git_blob": "4da29c3d7188f14f8be80bce281bfc0160fc50da",
-      "mode": "0644"
+      "mode": "0644",
+      "size": 182,
+      "sha256": "c1a2d73572fb36cca2b2df93610ae34d81bd54f484d74042c891fbbfc3249548",
+      "git_blob": "4da29c3d7188f14f8be80bce281bfc0160fc50da"
     },
     {
       "source": "panel/web/app.js",
       "target": "web/core.js",
-      "git_blob": "b5c5caa95efc926cc86fa600380c29d5578bd77b",
-      "mode": "0644"
+      "mode": "0644",
+      "size": 22255,
+      "sha256": "6c05cfc3cf9e622a4bc53c9b36853d1a9e5cdf4660b2b15edb70d653d11457ef",
+      "git_blob": "56a35dea4519238f6a0f914ab03e3525bfa57760"
     },
     {
       "source": "panel/v62/web/app.js",
       "target": "web/app.js",
-      "git_blob": "eab02a59482bf3751eb4c122d1daad6723a1ae38",
-      "mode": "0644"
+      "mode": "0644",
+      "size": 7048,
+      "sha256": "8ce36aa78867979d30d771a8fbaa6a288a728a3d82949176ddb3f01f44d882fc",
+      "git_blob": "eab02a59482bf3751eb4c122d1daad6723a1ae38"
     },
     {
       "source": "panel/v63/web/remember.js",
       "target": "web/remember.js",
-      "git_blob": "3c173b91de349b0c8491fd6af1c0fb3aadb9545d",
-      "mode": "0644"
+      "mode": "0644",
+      "size": 1416,
+      "sha256": "f2286722771c2410f0f14362a69a87f69c7cac1244fe74ceb1d17eca6b8cce5c",
+      "git_blob": "3c173b91de349b0c8491fd6af1c0fb3aadb9545d"
     },
     {
       "source": "panel/v64/web/interaction.js",
       "target": "web/interaction.js",
-      "git_blob": "710cba5a3c7cb0e9396a2ce44e214bfc775d7578",
-      "mode": "0644"
+      "mode": "0644",
+      "size": 12067,
+      "sha256": "4399c012916ef7a22a59a2c0c0f394aaf11dc9dc0001f0b5f7bc87bff6278a56",
+      "git_blob": "710cba5a3c7cb0e9396a2ce44e214bfc775d7578"
     },
     {
       "source": "panel/v65/web/refreshfix.js",
       "target": "web/refreshfix.js",
-      "git_blob": "714add486a97bb10b59ef70bcbe274c652b5805d",
-      "mode": "0644"
+      "mode": "0644",
+      "size": 3239,
+      "sha256": "dca5f8b78407bb5283af93da22017214b59d1cab5df8f214bb964923bf3407dd",
+      "git_blob": "714add486a97bb10b59ef70bcbe274c652b5805d"
     },
     {
       "source": "panel/v68/web/autosave.js",
       "target": "web/autosave.js",
-      "git_blob": "90fc58974fefa0cbc18b4fc930617600c9cafca3",
-      "mode": "0644"
+      "mode": "0644",
+      "size": 8791,
+      "sha256": "b6d72eef5aff1ab5c5021bfba2af1e4b3a7a750d81d834f401c0fd24d12a2a38",
+      "git_blob": "90fc58974fefa0cbc18b4fc930617600c9cafca3"
+    },
+    {
+      "source": "panel/gateway/__init__.py",
+      "target": "gateway/__init__.py",
+      "mode": "0644",
+      "size": 288,
+      "sha256": "38d465e6642ff870f34bfcf6745746715a7bd96f50d7803b5c581d4ca3d4e416",
+      "git_blob": "897577f72aa6817d77600362011f6a49d4556191"
+    },
+    {
+      "source": "panel/gateway/application.py",
+      "target": "gateway/application.py",
+      "mode": "0644",
+      "size": 6980,
+      "sha256": "972fed8d5277d3fdc23a652610633bb497bc7218f0ec2e4447bb46b3af4c73eb",
+      "git_blob": "6db4d2bf105562393fc7da7bafb5ba8822aa70e3"
+    },
+    {
+      "source": "panel/gateway/atomic.py",
+      "target": "gateway/atomic.py",
+      "mode": "0644",
+      "size": 1550,
+      "sha256": "95773fc2b5a17fe73ffba6a45055de4b4a4fafff9f8377ae691c733dd9c1c6c6",
+      "git_blob": "1c266eb234e9d160a076efb697c0a9a921a0e44d"
+    },
+    {
+      "source": "panel/gateway/audit.py",
+      "target": "gateway/audit.py",
+      "mode": "0644",
+      "size": 2670,
+      "sha256": "17c714de03afaaac3665792ad4e53fd1edb85bd44c87b5bb207ebe3799d059a3",
+      "git_blob": "c1a162f2dca804a42b1ec7ab95f78982c203f85b"
+    },
+    {
+      "source": "panel/gateway/autosave.py",
+      "target": "gateway/autosave.py",
+      "mode": "0644",
+      "size": 5824,
+      "sha256": "6e2f4c8307e36b6e7e5ea2b563ab6b721735b8bd6e3f321fae0ddf05495150a8",
+      "git_blob": "85f4967d18d3c85026b4f9cbcb57ac2bfc649e81"
+    },
+    {
+      "source": "panel/gateway/client.py",
+      "target": "gateway/client.py",
+      "mode": "0644",
+      "size": 1459,
+      "sha256": "45fcd4f291cda03fdf1b781607ee24c40be7c0fbad95132de8f8eaccf8497a19",
+      "git_blob": "30068f6b4710012766d6f2cb4eb302449d8701bb"
+    },
+    {
+      "source": "panel/gateway/entrypoint.py",
+      "target": "gateway/entrypoint.py",
+      "mode": "0644",
+      "size": 3006,
+      "sha256": "ef459c446a5fb5b332a1c193a646671febd3e6c74c0f9ff2a8713e3ef56bbcbb",
+      "git_blob": "f6ec81faa858065c6a897bf685e43896050fe426"
+    },
+    {
+      "source": "panel/gateway/helper.py",
+      "target": "gateway/helper.py",
+      "mode": "0644",
+      "size": 19093,
+      "sha256": "78afa38c469b00776612d00ee4225e878f253e792b8cd857dbc737379160dee0",
+      "git_blob": "a94b748ae62b4b1af2e0fad2fb180328c4960036"
+    },
+    {
+      "source": "panel/gateway/locks.py",
+      "target": "gateway/locks.py",
+      "mode": "0644",
+      "size": 1911,
+      "sha256": "ed8a3dac5e644f19b3282affe9d4e03cff6013b6256ef93d08e04d07b2166de1",
+      "git_blob": "6694336e625eb3002b78d29b8368fbd2252e1c02"
+    },
+    {
+      "source": "panel/gateway/protocol.py",
+      "target": "gateway/protocol.py",
+      "mode": "0644",
+      "size": 1513,
+      "sha256": "3efc35d801e29a9c92e19aeb44ad0d02c28920c7573e56c1fd2ef3713e7bfba6",
+      "git_blob": "53235863ad9a5339cdce5a3cffe5f3ed43e8950a"
+    },
+    {
+      "source": "panel/gateway/redaction.py",
+      "target": "gateway/redaction.py",
+      "mode": "0644",
+      "size": 1625,
+      "sha256": "86ab4fdccd4fd79f514581cae86e14700ca9f45ecd9506a01e27f1f01be3a515",
+      "git_blob": "38a732250534a24cbd488cd24d1970f6a2a0967e"
+    },
+    {
+      "source": "panel/gateway/runtime.py",
+      "target": "gateway/runtime.py",
+      "mode": "0644",
+      "size": 13010,
+      "sha256": "12fbea85379041c90be5702f8813ff371fea078a4b194e06137a253d2ee2eaee",
+      "git_blob": "67cb30d774fc4f073a92aad29f396eac6c7572fe"
+    },
+    {
+      "source": "panel/gateway/singbox.py",
+      "target": "gateway/singbox.py",
+      "mode": "0644",
+      "size": 11389,
+      "sha256": "3db03a6926df12d5dc41d7dbb5d03690801ade12ca9d5168e10007b245227488",
+      "git_blob": "3cd9f1482cf52f5fa6e24ebeca1a50cc8a1497db"
     }
-  ]
+  ],
+  "signature": {
+    "algorithm": "ed25519",
+    "key_id": "iwan-release-2026-01",
+    "value": "VivvhhAMdJliMGx1uA8xlZDxy/+5WtgpDxMFl/g4Ll09/yPjdk6zX9jp9/C4TCYm0OWkhFGGKpJw93hAQ96PAA=="
+  }
 }
