@@ -27,9 +27,13 @@ on:
       - "README.md"
       - "docs/**"
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,8 +66,11 @@ jobs:
       - name: Python syntax
         run: |
           python -m py_compile \
-            panel/app.py panel/v62/app.py panel/v63/app.py panel/v64/app.py \
-            panel/v65/app.py panel/v66/app.py panel/v67/app.py panel/v68/app.py panel/v69/app.py
+            panel/app.py panel/iwan_compat.py \
+            panel/v62/app.py panel/v63/app.py panel/v64/app.py \
+            panel/v65/app.py panel/v66/app.py panel/v67/app.py \
+            panel/v68/app.py panel/v69/app.py panel/v70/app.py \
+            tools/repair_iwan_schema.py tests/test_iwan_compat.py
 
       - name: Core unit tests
         run: |
@@ -73,6 +80,8 @@ jobs:
           python tests/test_panel.py PanelTests.test_patch_flat_credentials -v
           python tests/test_panel.py PanelTests.test_patch_iwan_preserves_blank_password -v
           python tests/test_panel.py PanelTests.test_public_iwan_redacts_password -v
+          cd ..
+          python tests/test_iwan_compat.py
 
       - name: JavaScript syntax
         run: |
@@ -83,14 +92,15 @@ jobs:
           node --check panel/v65/web/refreshfix.js
           node --check panel/v68/web/autosave.js
 
-      - name: Assemble and self-test v6.7 candidate
+      - name: Assemble and self-test v7 candidate
         run: |
           python - <<'PY'
           import os, pathlib, shutil, subprocess, tempfile
           with tempfile.TemporaryDirectory() as td:
               root=pathlib.Path(td,'release'); (root/'web').mkdir(parents=True)
               files={
-                  'panel/v69/app.py':'app.py',
+                  'panel/v70/app.py':'app.py',
+                  'panel/iwan_compat.py':'iwan_compat.py',
                   'panel/v68/app.py':'reliablecore.py',
                   'panel/v67/app.py':'autosavecore.py',
                   'panel/v66/app.py':'routingcore.py',
@@ -125,7 +135,7 @@ jobs:
                   'MOSDNS_CONFIG':str(pathlib.Path(td,'mosdns','config.yaml')),
               })
               subprocess.check_call(['python',str(root/'app.py'),'--self-test'],env=env)
-          print('v6.7 public candidate self-test passed')
+          print('v7 candidate self-test passed')
           PY
 
       - name: Verify immutable release manifest
@@ -134,14 +144,21 @@ jobs:
           import hashlib, json, re, subprocess
           manifest=json.load(open('panel-release.json',encoding='utf-8'))
           ref=manifest['ref']
+          files=manifest['files']
           assert re.fullmatch(r'[0-9a-f]{40}',ref)
-          assert manifest['version']=='6.7.0'
-          assert any(x['source']=='panel/v69/app.py' and x['target']=='app.py' for x in manifest['files'])
-          for item in manifest['files']:
+          assert re.fullmatch(r'\d+\.\d+\.\d+',str(manifest['version']))
+          assert isinstance(files,list) and 1 <= len(files) <= 30
+          assert len({item['source'] for item in files}) == len(files)
+          assert len({item['target'] for item in files}) == len(files)
+          assert any(item['target']=='app.py' for item in files)
+          for item in files:
+              assert '..' not in item['source'].split('/')
+              assert '..' not in item['target'].split('/')
+              assert item['mode'] in ('0644','0755')
               data=subprocess.check_output(['git','show',f"{ref}:{item['source']}"])
               actual=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
               assert actual == item['git_blob'], (item['source'], actual, item['git_blob'])
-          print('manifest verified')
+          print('manifest verified:',manifest['version'],ref[:12],len(files),'files')
           PY
 
       - name: Assemble and self-test stable release
