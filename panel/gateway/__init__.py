@@ -5,4 +5,4 @@ application boundary. Legacy source files remain in the repository only for
 old release reproducibility; new releases import from this package.
 """
 
-VERSION = "7.1.1"
+VERSION = "7.1.2"
