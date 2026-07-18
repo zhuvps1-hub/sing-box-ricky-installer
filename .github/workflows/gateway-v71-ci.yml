@@ -87,10 +87,14 @@ jobs:
             --version 7.1.0 \
             --ref 215b27ba6e443e77c3a6f97b90bb285bf27f302d \
             --output /tmp/panel-release-unsigned.json
-          echo MANIFEST_BASE64_BEGIN
-          base64 -w0 /tmp/panel-release-unsigned.json
-          echo
-          echo MANIFEST_BASE64_END
+
+      - name: Upload unsigned frozen manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: panel-release-unsigned-v7.1.0
+          path: /tmp/panel-release-unsigned.json
+          if-no-files-found: error
+          retention-days: 1
 
       - name: Assemble flat release without version stack
         run: |
