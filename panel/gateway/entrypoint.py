@@ -7,7 +7,6 @@ import importlib
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
 
 
@@ -67,7 +66,9 @@ def main() -> None:
         _self_test()
         return
     if args.helper:
-        from gateway.helper import main as helper_main
+        from gateway.helper import _gid_from_env, _uid_from_env, main as helper_main
+        if _uid_from_env() is None or _gid_from_env() is None:
+            raise SystemExit("helper 拒绝启动：面板用户或用户组不存在")
         helper_main()
         return
     core = _load_core()
