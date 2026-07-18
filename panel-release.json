@@ -1,8 +1,8 @@
 {
   "schema": 2,
   "product": "iwan-gateway-panel",
-  "version": "7.1.0",
-  "ref": "215b27ba6e443e77c3a6f97b90bb285bf27f302d",
+  "version": "7.1.1",
+  "ref": "a8670a7dfaa3268dbfb0367873fb1e4598836dbf",
   "architecture": "flat-package+root-helper",
   "minimum_python": "3.11",
   "release_key": {
@@ -15,17 +15,17 @@
       "source": "install-panel-v71.sh",
       "target": "install-panel-v71.sh",
       "mode": "0755",
-      "size": 12839,
-      "sha256": "167f0ae0b3e5f23ccf4d75cc1676c7fe90c633a577998d3dae2f9d55cb8e1835",
-      "git_blob": "fc49bb6f2eaf8a1b7ab0c3033c42088ac8c365e1"
+      "size": 15683,
+      "sha256": "61a2a06d93fef092c34a80a2e28f6e6e17466a33e9ddf58fd905742d61d5021b",
+      "git_blob": "64a3f3d4ff72b19c78a0c12a67371194be4ea7a0"
     },
     {
       "source": "panel/gateway/entrypoint.py",
       "target": "app.py",
       "mode": "0755",
-      "size": 3006,
-      "sha256": "ef459c446a5fb5b332a1c193a646671febd3e6c74c0f9ff2a8713e3ef56bbcbb",
-      "git_blob": "f6ec81faa858065c6a897bf685e43896050fe426"
+      "size": 3171,
+      "sha256": "170931af135bd88206647ac452e0be48818c825a762e224a27d04919ee34264f",
+      "git_blob": "30d8dcddbd1be2b71624d1e014ef2c4e10ed1468"
     },
     {
       "source": "panel/app.py",
@@ -135,9 +135,9 @@
       "source": "panel/gateway/__init__.py",
       "target": "gateway/__init__.py",
       "mode": "0644",
-      "size": 288,
-      "sha256": "38d465e6642ff870f34bfcf6745746715a7bd96f50d7803b5c581d4ca3d4e416",
-      "git_blob": "897577f72aa6817d77600362011f6a49d4556191"
+      "size": 287,
+      "sha256": "16c6a7ba449ddc7326bb2186a19cd2845bcfff067dd022047552ea6352dbc224",
+      "git_blob": "2d12e3e4b1ec3ba422e390bce6e4a964b2ddcafa"
     },
     {
       "source": "panel/gateway/application.py",
@@ -183,9 +183,9 @@
       "source": "panel/gateway/entrypoint.py",
       "target": "gateway/entrypoint.py",
       "mode": "0644",
-      "size": 3006,
-      "sha256": "ef459c446a5fb5b332a1c193a646671febd3e6c74c0f9ff2a8713e3ef56bbcbb",
-      "git_blob": "f6ec81faa858065c6a897bf685e43896050fe426"
+      "size": 3171,
+      "sha256": "170931af135bd88206647ac452e0be48818c825a762e224a27d04919ee34264f",
+      "git_blob": "30d8dcddbd1be2b71624d1e014ef2c4e10ed1468"
     },
     {
       "source": "panel/gateway/helper.py",
@@ -239,6 +239,6 @@
   "signature": {
     "algorithm": "ed25519",
     "key_id": "iwan-release-2026-01",
-    "value": "VivvhhAMdJliMGx1uA8xlZDxy/+5WtgpDxMFl/g4Ll09/yPjdk6zX9jp9/C4TCYm0OWkhFGGKpJw93hAQ96PAA=="
+    "value": "7vqjYo+MlYDomJaoFzODxC2Gwl5Z8TxFq/021hoXkF917ndzyR+B+JomE5TbLkV/H8WojXfywGwt0BBI3swXCA=="
   }
 }
