@@ -1,0 +1,163 @@
+name: verify-ai-sniff-routing
+
+on:
+  push:
+    paths:
+      - .github/workflows/verify-ai-sniff-routing.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch only AI routing logic
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/app.py')
+          text = path.read_text()
+
+          old_ai = '''    "ai": [
+                  "openai.com",
+                  "chatgpt.com",
+                  "oaistatic.com",
+                  "oaiusercontent.com",
+                  "anthropic.com",
+                  "claude.ai",
+                  "gemini.google.com",
+                  "perplexity.ai",
+                  "copilot.microsoft.com",
+              ],'''
+          new_ai = '''    "ai": [
+                  "openai.com",
+                  "chatgpt.com",
+                  "oaistatic.com",
+                  "oaiusercontent.com",
+                  "anthropic.com",
+                  "claude.ai",
+                  "claude.com",
+                  "gemini.google.com",
+                  "generativelanguage.googleapis.com",
+                  "aistudio.google.com",
+                  "bard.google.com",
+                  "perplexity.ai",
+                  "copilot.microsoft.com",
+                  "githubcopilot.com",
+              ],'''
+
+          old_rules = '''    rules: list[dict] = [{"ip_is_private": True, "outbound": "direct"}]
+              rules.append({"rule_set": ["geosite-cn", "geoip-cn"], "outbound": routing["cn"]})
+              for key in ["ai", "youtube", "netflix", "tiktok", "telegram", "google"]:
+                  rule: dict = {"domain_suffix": DOMAINS[key], "outbound": routing[key]}
+          '''
+          new_rules = '''    rules: list[dict] = [
+                  {"action": "sniff"},
+                  {"ip_is_private": True, "outbound": "direct"},
+                  {"rule_set": ["geosite-cn", "geoip-cn"], "outbound": routing["cn"]},
+                  {"domain_suffix": DOMAINS["ai"], "outbound": routing["ai"]},
+              ]
+              for key in ["youtube", "netflix", "tiktok", "telegram", "google"]:
+                  rule: dict = {"domain_suffix": DOMAINS[key], "outbound": routing[key]}
+          '''
+
+          if old_ai not in text:
+              raise SystemExit('Expected AI domain block was not found; refusing to modify unrelated code')
+          if old_rules not in text:
+              raise SystemExit('Expected routing block was not found; refusing to modify unrelated code')
+
+          text = text.replace(old_ai, new_ai, 1)
+          text = text.replace(old_rules, new_rules, 1)
+          path.write_text(text)
+          PY
+
+      - name: Python and shell syntax checks
+        run: |
+          python -m py_compile app/app.py app/importers.py
+          bash -n install.sh
+
+      - name: Build representative iWAN config
+        env:
+          PYTHONPATH: app
+          IWAN_DATA: /tmp/iwan-gateway-test
+        run: |
+          python - <<'PY'
+          import json
+          import app as gateway
+
+          routing = {key: 'direct' for key in gateway.CATS}
+          routing['ai'] = 'SG'
+          routing['default'] = 'direct'
+          state = {
+              'nodes': [
+                  {
+                      'tag': 'SG',
+                      'type': 'shadowsocks',
+                      'server': '127.0.0.1',
+                      'port': 443,
+                      'outbound': {
+                          'type': 'shadowsocks',
+                          'server': '127.0.0.1',
+                          'server_port': 443,
+                          'method': 'aes-128-gcm',
+                          'password': 'verification-password',
+                      },
+                      'source': 'CI verification',
+                  }
+              ],
+              'routing': routing,
+              'iwan': {
+                  'enabled': True,
+                  'listen': '::',
+                  'port': 8000,
+                  'pool': '10.10.10.0/24',
+                  'mtu': 1400,
+                  'username': '',
+                  'password': '',
+              },
+          }
+          config = gateway.build(state)
+          rules = config['route']['rules']
+          assert rules[0] == {'action': 'sniff'}
+          assert rules[1] == {'ip_is_private': True, 'outbound': 'direct'}
+          assert rules[2]['rule_set'] == ['geosite-cn', 'geoip-cn']
+          assert rules[3]['domain_suffix'] == gateway.DOMAINS['ai']
+          assert rules[3]['outbound'] == 'SG'
+          assert 'generativelanguage.googleapis.com' in gateway.DOMAINS['ai']
+          assert 'githubcopilot.com' in gateway.DOMAINS['ai']
+          with open('/tmp/ai-routing-config.json', 'w') as fh:
+              json.dump(config, fh, ensure_ascii=False, indent=2)
+          PY
+
+      - name: Validate with Ricky-Hao sing-box with_iwan
+        run: |
+          curl -fL --retry 3 -o /tmp/sing-box.tar.gz \
+            https://github.com/Ricky-Hao/sing-box/releases/download/v1.13.13-rickyhao.22/sing-box-1.13.13-rickyhao.22-linux-amd64.tar.gz
+          tar -xzf /tmp/sing-box.tar.gz -C /tmp
+          SB_BIN=$(find /tmp -type f -name sing-box -perm -u+x | head -n 1)
+          if [ -z "$SB_BIN" ]; then
+            SB_BIN=$(find /tmp -type f -name sing-box | head -n 1)
+            chmod +x "$SB_BIN"
+          fi
+          "$SB_BIN" version | tee /tmp/sing-box-version.txt
+          grep -q 'with_iwan' /tmp/sing-box-version.txt
+          timeout 25s "$SB_BIN" check -c /tmp/ai-routing-config.json
+
+      - name: Ensure only app.py changed
+        run: |
+          test "$(git diff --name-only | tr -d '\r')" = "app/app.py"
+          git diff --check
+
+      - name: Commit verified fix
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/app.py
+          git commit -m "fix: sniff real domains for AI routing"
+          git push
