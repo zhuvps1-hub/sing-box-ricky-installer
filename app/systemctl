@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -u
+
+REAL_SYSTEMCTL="/usr/bin/systemctl"
+[[ -x "$REAL_SYSTEMCTL" ]] || REAL_SYSTEMCTL="/bin/systemctl"
+
+# The panel is often reached through the same iWAN tunnel being reloaded.
+# Queue the sing-box reload so the HTTP response can reach the browser first.
+if [[ $# -ge 2 && "$1" == "reload" && ( "$2" == "sing-box" || "$2" == "sing-box.service" ) ]]; then
+  unit="iwan-gateway-reload-$(date +%s%N)"
+  /usr/bin/systemd-run \
+    --quiet \
+    --collect \
+    --unit="$unit" \
+    /bin/sh -c "sleep 3; '$REAL_SYSTEMCTL' reload sing-box || '$REAL_SYSTEMCTL' restart sing-box" \
+    >/dev/null 2>&1
+  exit $?
+fi
+
+exec "$REAL_SYSTEMCTL" "$@"
