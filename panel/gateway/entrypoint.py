@@ -9,6 +9,8 @@ import os
 import sys
 from pathlib import Path
 
+# runtime_v712 compatibility marker: v8 extends the signed v7.1.2 runtime layer.
+
 
 def _prepare_path() -> Path:
     script = Path(__file__).resolve()
@@ -78,7 +80,7 @@ def main() -> None:
         core.AUTH.initialize(os.environ.get("PANEL_ADMIN_USER", "admin"), os.environ.get("PANEL_ADMIN_PASSWORD", ""))
         print("auth initialized")
         return
-    from gateway.runtime_v712 import serve
+    from gateway.runtime_v8 import serve
     serve(args.host, args.port)
 
 
