@@ -46,9 +46,14 @@ DOMAINS = {
         "oaiusercontent.com",
         "anthropic.com",
         "claude.ai",
+        "claude.com",
         "gemini.google.com",
+        "generativelanguage.googleapis.com",
+        "aistudio.google.com",
+        "bard.google.com",
         "perplexity.ai",
         "copilot.microsoft.com",
+        "githubcopilot.com",
     ],
     "google": [
         "google.com",
@@ -334,7 +339,7 @@ def build(state: dict) -> dict:
         inbounds.append(inbound)
 
     rules: list[dict] = [
-        {"inbound": ["iwan-in"], "port": 53, "action": "hijack-dns"},
+        {"action": "sniff"},
         {"ip_is_private": True, "outbound": "direct"},
         {"rule_set": ["geosite-cn", "geoip-cn"], "outbound": routing["cn"]},
         {"rule_set": "geosite-ai", "outbound": routing["ai"]},
@@ -348,12 +353,6 @@ def build(state: dict) -> dict:
 
     return {
         "log": {"level": "info", "timestamp": True},
-        "dns": {
-            "servers": [{"type": "local", "tag": "dns-upstream", "prefer_go": True}],
-            "final": "dns-upstream",
-            "strategy": "prefer_ipv4",
-            "reverse_mapping": True,
-        },
         "inbounds": inbounds,
         "outbounds": outbounds,
         "route": {
