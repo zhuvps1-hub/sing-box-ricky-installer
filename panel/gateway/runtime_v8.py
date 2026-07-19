@@ -1,10 +1,8 @@
 """v8 runtime: persistent auth, real iWAN status and sing-box 1.13 routing."""
 from __future__ import annotations
 
-import copy
 import ipaddress
 import os
-import re
 import time
 from email.utils import formatdate
 from pathlib import Path
@@ -14,8 +12,9 @@ import core
 
 from . import runtime as base
 from . import runtime_v712 as legacy
+from . import singbox as singbox_model
 
-VERSION = "8.0.0"
+VERSION = "8.0.1"
 DATA_DIR = Path(os.environ.get("IWAN_PANEL_DATA_DIR", "/var/lib/iwan-gateway"))
 legacy.REMEMBER_KEY = DATA_DIR / "remember.key"
 core.VERSION = VERSION
@@ -46,11 +45,7 @@ def _route_rule(category: str, outbound: str) -> dict[str, Any]:
 
 
 def managed_rules(mappings: dict[str, str]) -> list[dict[str, Any]]:
-    """Generate modern sing-box rules.
-
-    sing-box 1.11+ moved outbound selection into a final route action.  A sniff
-    action is installed first so domain rules work for iWAN forwarded traffic.
-    """
+    """Generate modern sing-box rules for the active renderer."""
     rules: list[dict[str, Any]] = [{"action": "sniff"}]
     for category in core.ROUTE_CATEGORIES:
         outbound = str(mappings.get(category, "")).strip()
@@ -59,8 +54,10 @@ def managed_rules(mappings: dict[str, str]) -> list[dict[str, Any]]:
     return rules
 
 
+# The renderer resolves this symbol from gateway.singbox at call time.  Patching
+# only core.managed_rules does not affect saves, so both references are updated.
 core.managed_rules = managed_rules
-_original_sample_config = core.sample_config
+singbox_model.managed_rules = managed_rules
 
 
 def _socket_rows() -> tuple[list[str], list[str]]:
@@ -77,8 +74,7 @@ def _peer_from_row(row: str, port: int) -> str:
     columns = row.split()
     if len(columns) < 5:
         return ""
-    candidates = columns[-2:]
-    for value in reversed(candidates):
+    for value in reversed(columns[-2:]):
         text = value.strip("[]")
         if f":{port}" in text:
             continue
@@ -92,13 +88,32 @@ def _peer_from_row(row: str, port: int) -> str:
     return ""
 
 
-def sample_config() -> dict[str, Any]:
-    sampled = _original_sample_config()
-    iwan = sampled.get("iwan") if isinstance(sampled.get("iwan"), dict) else {}
+def _raw_config() -> dict[str, Any]:
+    try:
+        value = base.APP.load_config()
+        return value if isinstance(value, dict) else {}
+    except Exception:
+        value = core.read_json(core.SINGBOX_CONFIG, {})
+        return value if isinstance(value, dict) else {}
+
+
+def _augment_sample(sampled: dict[str, Any]) -> dict[str, Any]:
+    result = dict(sampled) if isinstance(sampled, dict) else {}
+    raw = _raw_config()
+
+    iwan = result.get("iwan") if isinstance(result.get("iwan"), dict) else {}
+    if not iwan:
+        inbounds = raw.get("inbounds", []) if isinstance(raw.get("inbounds"), list) else []
+        inbound = next((item for item in inbounds if singbox_model.is_iwan(item)), None)
+        if isinstance(inbound, dict):
+            iwan = singbox_model.public_iwan(inbound)
+            result["iwan"] = iwan
+
     try:
         port = int(iwan.get("listen_port") or 0)
     except (TypeError, ValueError):
         port = 0
+
     listening = False
     peers: list[str] = []
     if port:
@@ -111,34 +126,54 @@ def sample_config() -> dict[str, Any]:
             peer = _peer_from_row(row, port)
             if peer and peer not in peers:
                 peers.append(peer)
-    raw = core.read_json(core.SINGBOX_CONFIG, {})
-    route = raw.get("route", {}) if isinstance(raw, dict) else {}
-    rules = route.get("rules", []) if isinstance(route, dict) else []
+
+    route = raw.get("route", {}) if isinstance(raw.get("route"), dict) else {}
+    rules = route.get("rules", []) if isinstance(route.get("rules"), list) else []
     modern_routes = [
         rule for rule in rules
         if isinstance(rule, dict) and rule.get("action") == "route" and rule.get("outbound")
-    ] if isinstance(rules, list) else []
+    ]
     sniff_enabled = any(
         isinstance(rule, dict) and rule.get("action") == "sniff"
         for rule in rules
-    ) if isinstance(rules, list) else False
-    sampled["iwan_runtime"] = {
+    )
+    final = str(route.get("final", result.get("default", ""))).strip()
+
+    result["iwan_runtime"] = {
         "configured": bool(iwan),
         "listening": listening,
         "port": port,
         "client_count": len(peers),
         "peers": peers[:12],
     }
-    sampled["routing_runtime"] = {
+    result["routing_runtime"] = {
         "sniff": sniff_enabled,
         "modern_rule_count": len(modern_routes),
-        "effective": sniff_enabled and bool(modern_routes or sampled.get("default")),
+        "effective": sniff_enabled and bool(modern_routes or final),
     }
-    return sampled
+    return result
+
+
+_original_core_sample_config = core.sample_config
+
+
+def sample_config() -> dict[str, Any]:
+    return _augment_sample(_original_core_sample_config())
 
 
 core.sample_config = sample_config
 
+# /api/config uses GatewayApplication.sample_config(), not core.sample_config().
+# Patch the live application instance so the editor and status cards see the
+# same applied sing-box configuration.
+_original_app_sample_config = base.APP.sample_config
+
+
+def app_sample_config() -> dict[str, Any]:
+    return _augment_sample(_original_app_sample_config())
+
+
+base.APP.sample_config = app_sample_config
 
 base.ASSETS.update({
     "/assets/v8.css": ("v8.css", "text/css; charset=utf-8"),
