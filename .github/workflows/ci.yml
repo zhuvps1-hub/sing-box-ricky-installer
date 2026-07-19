@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install parser dependency
+        run: python -m pip install --disable-pip-version-check pyyaml
+      - name: Check Python syntax
+        run: python -m py_compile app/app.py app/importers.py
+      - name: Check installer syntax
+        run: bash -n install.sh
+      - name: Importer smoke test
+        run: |
+          PYTHONPATH=app python - <<'PY'
+          import json
+          from importers import parse_import
+
+          data = {
+              "outbounds": [
+                  {
+                      "type": "vless",
+                      "tag": "smoke-node",
+                      "server": "example.invalid",
+                      "server_port": 443,
+                      "uuid": "00000000-0000-0000-0000-000000000001",
+                      "tls": {"enabled": True, "server_name": "example.invalid"},
+                  }
+              ]
+          }
+          nodes, warnings = parse_import(json.dumps(data))
+          assert not warnings
+          assert len(nodes) == 1
+          assert nodes[0]["type"] == "vless"
+          assert nodes[0]["tag"] == "smoke-node"
+          PY
