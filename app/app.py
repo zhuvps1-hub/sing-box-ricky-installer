@@ -49,6 +49,11 @@ DOMAINS = {
         "gemini.google.com",
         "perplexity.ai",
         "copilot.microsoft.com",
+        "claude.com",
+        "generativelanguage.googleapis.com",
+        "aistudio.google.com",
+        "bard.google.com",
+        "githubcopilot.com",
     ],
     "google": [
         "google.com",
@@ -326,9 +331,13 @@ def build(state: dict) -> dict:
             ]
         inbounds.append(inbound)
 
-    rules: list[dict] = [{"ip_is_private": True, "outbound": "direct"}]
-    rules.append({"rule_set": ["geosite-cn", "geoip-cn"], "outbound": routing["cn"]})
-    for key in ["ai", "youtube", "netflix", "tiktok", "telegram", "google"]:
+    rules: list[dict] = [
+        {"action": "sniff"},
+        {"ip_is_private": True, "outbound": "direct"},
+        {"rule_set": ["geosite-cn", "geoip-cn"], "outbound": routing["cn"]},
+        {"domain_suffix": DOMAINS["ai"], "outbound": routing["ai"]},
+    ]
+    for key in ["youtube", "netflix", "tiktok", "telegram", "google"]:
         rule: dict = {"domain_suffix": DOMAINS[key], "outbound": routing[key]}
         if key == "telegram":
             rule["ip_cidr"] = TG_CIDR

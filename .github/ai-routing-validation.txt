@@ -1,4 +1,4 @@
-status=failure
+status=success
 $ python -m py_compile app/app.py app/importers.py
 $ bash -n install.sh
 $ curl -fL --retry 3 -o /tmp/sing-box.tar.gz https://github.com/Ricky-Hao/sing-box/releases/download/v1.13.13-rickyhao.22/sing-box-1.13.13-rickyhao.22-linux-amd64.tar.gz
@@ -7,8 +7,9 @@ $ curl -fL --retry 3 -o /tmp/sing-box.tar.gz https://github.com/Ricky-Hao/sing-b
 
   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
   0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
 
-100 22.8M  100 22.8M    0     0  92.5M      0 --:--:-- --:--:-- --:--:-- 92.5M
+100 22.8M  100 22.8M    0     0  99.0M      0 --:--:-- --:--:-- --:--:-- 99.0M
 $ tar -xzf /tmp/sing-box.tar.gz -C /tmp
 $ /tmp/sing-box-1.13.13-rickyhao.22-linux-amd64/sing-box version
 sing-box version 1.13.13-rickyhao.22
@@ -18,9 +19,4 @@ Tags: with_gvisor,with_quic,with_dhcp,with_wireguard,with_iwan,with_utls,with_ac
 Revision: a18ab24b01bca00631b58267f7e68abc75ef693a
 CGO: disabled
 $ timeout 30s /tmp/sing-box-1.13.13-rickyhao.22-linux-amd64/sing-box check -c /tmp/ai-routing-config.json
-[31mFATAL[0m[0000] initialize inbound[0]: missing users
-Traceback (most recent call last):
-  File "<stdin>", line 131, in <module>
-  File "<stdin>", line 26, in run
-RuntimeError: command failed with exit code 1
-
+AI routing validation passed
