@@ -23,7 +23,6 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import json
-          import os
           import re
           import subprocess
           import sys
@@ -35,12 +34,7 @@ jobs:
 
           def run(command, timeout=120):
               logs.append('$ ' + ' '.join(command))
-              result = subprocess.run(
-                  command,
-                  text=True,
-                  capture_output=True,
-                  timeout=timeout,
-              )
+              result = subprocess.run(command, text=True, capture_output=True, timeout=timeout)
               if result.stdout:
                   logs.append(result.stdout.strip())
               if result.stderr:
@@ -125,8 +119,8 @@ jobs:
                       'port': 8000,
                       'pool': '10.10.10.0/24',
                       'mtu': 1400,
-                      'username': '',
-                      'password': '',
+                      'username': 'ci-user',
+                      'password': 'ci-password',
                   },
               }
               config = gateway.build(state)
