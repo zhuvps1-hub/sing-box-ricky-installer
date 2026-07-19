@@ -161,3 +161,5 @@ jobs:
           git add app/app.py
           git commit -m "fix: sniff real domains for AI routing"
           git push
+
+# trigger: second push ensures the workflow is active on the default branch
