@@ -112,7 +112,14 @@ CN_RULES = [
         "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geoip/cn.srs",
         "download_detour": "direct",
     },
-]
+ ]
+AI_RULE_SET = {
+    "type": "remote",
+    "tag": "geosite-ai",
+    "format": "binary",
+    "url": "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/sing/geo/geosite/category-ai-!cn.srs",
+    "download_detour": "direct",
+}
 LOCK = threading.Lock()
 
 
@@ -326,9 +333,14 @@ def build(state: dict) -> dict:
             ]
         inbounds.append(inbound)
 
-    rules: list[dict] = [{"ip_is_private": True, "outbound": "direct"}]
-    rules.append({"rule_set": ["geosite-cn", "geoip-cn"], "outbound": routing["cn"]})
-    for key in ["ai", "youtube", "netflix", "tiktok", "telegram", "google"]:
+    rules: list[dict] = [
+        {"inbound": ["iwan-in"], "port": 53, "action": "hijack-dns"},
+        {"ip_is_private": True, "outbound": "direct"},
+        {"rule_set": ["geosite-cn", "geoip-cn"], "outbound": routing["cn"]},
+        {"rule_set": "geosite-ai", "outbound": routing["ai"]},
+        {"domain_suffix": DOMAINS["ai"], "outbound": routing["ai"]},
+    ]
+    for key in ["youtube", "netflix", "tiktok", "telegram", "google"]:
         rule: dict = {"domain_suffix": DOMAINS[key], "outbound": routing[key]}
         if key == "telegram":
             rule["ip_cidr"] = TG_CIDR
@@ -336,10 +348,16 @@ def build(state: dict) -> dict:
 
     return {
         "log": {"level": "info", "timestamp": True},
+        "dns": {
+            "servers": [{"type": "local", "tag": "dns-upstream", "prefer_go": True}],
+            "final": "dns-upstream",
+            "strategy": "prefer_ipv4",
+            "reverse_mapping": True,
+        },
         "inbounds": inbounds,
         "outbounds": outbounds,
         "route": {
-            "rule_set": CN_RULES,
+            "rule_set": [*CN_RULES, AI_RULE_SET],
             "rules": rules,
             "final": routing["default"],
             "auto_detect_interface": True,
