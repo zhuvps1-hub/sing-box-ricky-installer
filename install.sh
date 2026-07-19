@@ -17,7 +17,7 @@ command -v systemctl >/dev/null || die "系统必须使用 systemd"
 
 if command -v apt-get >/dev/null; then
   apt-get update -y
-  DEBIAN_FRONTEND=noninteractive apt-get install -y python3 curl tar ca-certificates
+  DEBIAN_FRONTEND=noninteractive apt-get install -y python3 python3-yaml curl tar ca-certificates
 fi
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
@@ -32,10 +32,11 @@ sing-box version | grep -q with_iwan || die "当前核心不包含 with_iwan"
 info "安装 iWAN Gateway"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/app/static" "$DATA_DIR/backups" "$SB_DIR"
-for f in app.py static/index.html static/style.css static/app.js; do
+for f in app.py importers.py static/index.html static/style.css static/app.js; do
   mkdir -p "$APP_DIR/app/$(dirname "$f")"
   curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/app/${f}" -o "$APP_DIR/app/$f"
 done
+python3 -m py_compile "$APP_DIR/app/app.py" "$APP_DIR/app/importers.py" || die "面板代码检查失败"
 chmod 700 "$DATA_DIR"
 
 cat > /etc/systemd/system/iwan-gateway.service <<EOF
@@ -89,6 +90,7 @@ chmod 600 "$SB_DIR/config.json"
 sing-box check -c "$SB_DIR/config.json"
 systemctl daemon-reload
 systemctl enable --now sing-box iwan-gateway
+systemctl restart iwan-gateway
 
 if command -v ufw >/dev/null; then ufw allow "$PANEL_PORT/tcp" >/dev/null || true; fi
 ip=$(hostname -I 2>/dev/null | awk '{print $1}')
