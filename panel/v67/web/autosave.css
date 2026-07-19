@@ -1,9 +1,0 @@
-html.silent-autosave #saveBtn,
-html.silent-autosave #applyState,
-html.silent-autosave #routeTools {
-  display: none !important;
-}
-
-html.silent-autosave .top-actions {
-  gap: 10px;
-}
