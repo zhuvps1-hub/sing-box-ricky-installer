@@ -1,0 +1,46 @@
+name: revert-ai-rule
+
+on:
+  push:
+    paths:
+      - .github/workflows/revert-ai-rule.yml
+
+permissions:
+  contents: write
+
+jobs:
+  revert:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore last stable routing and UI files
+        run: |
+          git checkout d5e43ab6a2eb2228a2557743cd654476bc86feb3 -- app/app.py app/static/style.css
+
+      - name: Validate restored files
+        run: |
+          python -m py_compile app/app.py app/importers.py
+          bash -n install.sh
+          python - <<'PY'
+          from pathlib import Path
+          app = Path('app/app.py').read_text()
+          css = Path('app/static/style.css').read_text()
+          assert '{"action": "sniff", "timeout": "1s"}' not in app
+          assert 'rules: list[dict] = [{"ip_is_private": True, "outbound": "direct"}]' in app
+          assert 'grid-template-columns:repeat(4,1fr)' in css
+          PY
+
+      - name: Commit exact rollback
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/app.py app/static/style.css
+          if git diff --cached --quiet; then
+            echo "Already restored"
+          else
+            git commit -m "revert: restore stable routing rules and UI"
+            git push
+          fi
