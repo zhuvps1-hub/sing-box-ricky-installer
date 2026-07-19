@@ -46,26 +46,9 @@ DOMAINS = {
         "oaiusercontent.com",
         "anthropic.com",
         "claude.ai",
-        "claudeusercontent.com",
         "gemini.google.com",
-        "aistudio.google.com",
-        "ai.google.dev",
-        "generativelanguage.googleapis.com",
-        "makersuite.google.com",
         "perplexity.ai",
-        "pplx.ai",
         "copilot.microsoft.com",
-        "githubcopilot.com",
-        "x.ai",
-        "grok.com",
-        "deepseek.com",
-        "deepseek.ai",
-        "mistral.ai",
-        "mistralcdn.com",
-        "cohere.com",
-        "huggingface.co",
-        "hf.co",
-        "replicate.com",
     ],
     "google": [
         "google.com",
@@ -343,13 +326,9 @@ def build(state: dict) -> dict:
             ]
         inbounds.append(inbound)
 
-    rules: list[dict] = [
-        {"action": "sniff", "timeout": "1s"},
-        {"ip_is_private": True, "outbound": "direct"},
-        {"domain_suffix": DOMAINS["ai"], "outbound": routing["ai"]},
-        {"rule_set": ["geosite-cn", "geoip-cn"], "outbound": routing["cn"]},
-    ]
-    for key in ["youtube", "netflix", "tiktok", "telegram", "google"]:
+    rules: list[dict] = [{"ip_is_private": True, "outbound": "direct"}]
+    rules.append({"rule_set": ["geosite-cn", "geoip-cn"], "outbound": routing["cn"]})
+    for key in ["ai", "youtube", "netflix", "tiktok", "telegram", "google"]:
         rule: dict = {"domain_suffix": DOMAINS[key], "outbound": routing[key]}
         if key == "telegram":
             rule["ip_cidr"] = TG_CIDR
