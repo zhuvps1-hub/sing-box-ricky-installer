@@ -31,11 +31,13 @@ sing-box version | grep -q with_iwan || die "当前核心不包含 with_iwan"
 
 info "安装 iWAN Gateway"
 rm -rf "$APP_DIR"
-mkdir -p "$APP_DIR/app/static" "$DATA_DIR/backups" "$SB_DIR"
+mkdir -p "$APP_DIR/app/static" "$APP_DIR/bin" "$DATA_DIR/backups" "$SB_DIR"
 for f in app.py importers.py static/index.html static/style.css static/app.js; do
   mkdir -p "$APP_DIR/app/$(dirname "$f")"
   curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/app/${f}" -o "$APP_DIR/app/$f"
 done
+curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/app/systemctl" -o "$APP_DIR/bin/systemctl"
+chmod 0755 "$APP_DIR/bin/systemctl"
 python3 -m py_compile "$APP_DIR/app/app.py" "$APP_DIR/app/importers.py" || die "面板代码检查失败"
 chmod 700 "$DATA_DIR"
 
@@ -51,6 +53,7 @@ User=root
 WorkingDirectory=$APP_DIR/app
 Environment=IWAN_DATA=$DATA_DIR
 Environment=IWAN_PANEL_PORT=$PANEL_PORT
+Environment=PATH=$APP_DIR/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ExecStart=/usr/bin/python3 $APP_DIR/app/app.py
 Restart=always
 RestartSec=2
