@@ -1,0 +1,112 @@
+name: fix-async-apply
+
+on:
+  push:
+    paths:
+      - .github/workflows/fix-async-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-test-commit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch apply flow without touching routing rules
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          app_path = Path('app/app.py')
+          text = app_path.read_text(encoding='utf-8')
+
+          def replace_once(old: str, new: str, label: str) -> None:
+              global text
+              if text.count(old) != 1:
+                  raise SystemExit(f'{label}: expected one match, got {text.count(old)}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              'from urllib.parse import urlparse\n',
+              'from urllib.parse import parse_qs, urlparse\n',
+              'urllib import',
+          )
+
+          replace_once(
+              'LOCK = threading.Lock()\n',
+              '''LOCK = threading.Lock()\nAPPLY_LOCK = threading.Lock()\nAPPLY_JOBS: dict[str, dict] = {}\nACTIVE_APPLY = ""\n''',
+              'apply globals',
+          )
+
+          old_apply = '''def apply_config(state: dict) -> None:\n    with LOCK:\n        config = build(state)\n        SB.parent.mkdir(parents=True, exist_ok=True)\n        descriptor, temporary = tempfile.mkstemp(prefix="iwan-", suffix=".json", dir=str(SB.parent))\n        os.close(descriptor)\n        Path(temporary).write_text(json.dumps(config, ensure_ascii=False, indent=2))\n        try:\n            checked = subprocess.run(\n                ["/usr/local/bin/sing-box", "check", "-c", temporary],\n                text=True,\n                capture_output=True,\n                timeout=10,\n            )\n            if checked.returncode:\n                raise ValueError((checked.stderr or checked.stdout).strip() or "配置检查失败")\n            backup = DATA / "backups" / f"config-{int(time.time())}.json"\n            backup.parent.mkdir(exist_ok=True)\n            if SB.exists():\n                backup.write_bytes(SB.read_bytes())\n            os.replace(temporary, SB)\n            os.chmod(SB, 0o600)\n            reloaded = subprocess.run(["systemctl", "reload", "sing-box"], capture_output=True, timeout=4)\n            if reloaded.returncode:\n                subprocess.run(["systemctl", "restart", "sing-box"], check=True, timeout=8)\n            time.sleep(0.2)\n            if subprocess.run(["systemctl", "is-active", "--quiet", "sing-box"]).returncode:\n                raise ValueError("sing-box 未正常运行")\n        finally:\n            if os.path.exists(temporary):\n                os.unlink(temporary)\n'''
+
+          new_apply = '''def _stage_config_unlocked(state: dict) -> Path | None:\n    config = build(state)\n    SB.parent.mkdir(parents=True, exist_ok=True)\n    descriptor, temporary = tempfile.mkstemp(prefix="iwan-", suffix=".json", dir=str(SB.parent))\n    os.close(descriptor)\n    Path(temporary).write_text(json.dumps(config, ensure_ascii=False, indent=2))\n    backup: Path | None = None\n    try:\n        checked = subprocess.run(\n            ["/usr/local/bin/sing-box", "check", "-c", temporary],\n            text=True,\n            capture_output=True,\n            timeout=10,\n        )\n        if checked.returncode:\n            raise ValueError((checked.stderr or checked.stdout).strip() or "配置检查失败")\n        if SB.exists():\n            backup = DATA / "backups" / f"config-{int(time.time() * 1000)}.json"\n            backup.parent.mkdir(exist_ok=True)\n            backup.write_bytes(SB.read_bytes())\n        os.replace(temporary, SB)\n        os.chmod(SB, 0o600)\n        return backup\n    finally:\n        if os.path.exists(temporary):\n            os.unlink(temporary)\n\n\ndef _reload_service_unlocked() -> None:\n    reloaded = subprocess.run(["systemctl", "reload", "sing-box"], capture_output=True, timeout=4)\n    if reloaded.returncode:\n        subprocess.run(["systemctl", "restart", "sing-box"], check=True, timeout=8)\n    time.sleep(0.35)\n    if subprocess.run(["systemctl", "is-active", "--quiet", "sing-box"]).returncode:\n        raise ValueError("sing-box 未正常运行")\n\n\ndef _rollback_unlocked(backup: Path | None) -> None:\n    if backup is None or not backup.exists():\n        return\n    SB.write_bytes(backup.read_bytes())\n    os.chmod(SB, 0o600)\n    subprocess.run(["systemctl", "restart", "sing-box"], check=True, timeout=8)\n\n\ndef apply_config(state: dict) -> None:\n    with LOCK:\n        backup = _stage_config_unlocked(state)\n        try:\n            _reload_service_unlocked()\n        except Exception:\n            _rollback_unlocked(backup)\n            raise\n\n\ndef _set_apply_job(job_id: str, state: str, message: str = "", error: str = "") -> None:\n    now = int(time.time())\n    with APPLY_LOCK:\n        APPLY_JOBS[job_id] = {\n            "ok": state != "error",\n            "id": job_id,\n            "state": state,\n            "message": message,\n            "error": error,\n            "updated": now,\n        }\n        for key, value in list(APPLY_JOBS.items()):\n            if now - int(value.get("updated", now)) > 600:\n                APPLY_JOBS.pop(key, None)\n\n\ndef apply_job_status(job_id: str) -> dict:\n    with APPLY_LOCK:\n        value = APPLY_JOBS.get(job_id)\n        if value is None:\n            return {"ok": False, "id": job_id, "state": "unknown", "message": "等待应用任务"}\n        return dict(value)\n\n\ndef _async_activate(job_id: str, backup: Path | None, previous_state: dict) -> None:\n    global ACTIVE_APPLY\n    time.sleep(1.2)\n    try:\n        with LOCK:\n            try:\n                _reload_service_unlocked()\n            except Exception:\n                _rollback_unlocked(backup)\n                save_state(previous_state)\n                raise\n        _set_apply_job(job_id, "success", "配置已生效")\n    except Exception as exc:\n        _set_apply_job(job_id, "error", "配置应用失败", str(exc))\n    finally:\n        with APPLY_LOCK:\n            if ACTIVE_APPLY == job_id:\n                ACTIVE_APPLY = ""\n\n\ndef start_async_apply(state: dict, previous_state: dict, requested_id: str) -> str:\n    global ACTIVE_APPLY\n    job_id = re.sub(r"[^A-Za-z0-9_.-]", "", requested_id)[:80] or secrets.token_urlsafe(12)\n    with APPLY_LOCK:\n        if ACTIVE_APPLY:\n            raise ValueError("已有配置正在应用，请稍后再试")\n        ACTIVE_APPLY = job_id\n        APPLY_JOBS[job_id] = {\n            "ok": True,\n            "id": job_id,\n            "state": "checking",\n            "message": "正在检查配置",\n            "error": "",\n            "updated": int(time.time()),\n        }\n    try:\n        with LOCK:\n            backup = _stage_config_unlocked(state)\n        save_state(state)\n        _set_apply_job(job_id, "reloading", "配置已保存，正在重载")\n        threading.Thread(\n            target=_async_activate,\n            args=(job_id, backup, previous_state),\n            daemon=True,\n            name=f"apply-{job_id[:16]}",\n        ).start()\n        return job_id\n    except Exception as exc:\n        with APPLY_LOCK:\n            if ACTIVE_APPLY == job_id:\n                ACTIVE_APPLY = ""\n        _set_apply_job(job_id, "error", "配置检查失败", str(exc))\n        raise\n'''
+          replace_once(old_apply, new_apply, 'apply_config block')
+
+          replace_once(
+              '''        self.end_headers()\n        self.wfile.write(body)\n''',
+              '''        self.end_headers()\n        try:\n            self.wfile.write(body)\n            self.wfile.flush()\n        except (BrokenPipeError, ConnectionResetError):\n            self.close_connection = True\n''',
+              'json response flush',
+          )
+
+          replace_once(
+              '''        if path == "/api/state":\n            state = internal_state()\n''',
+              '''        if path == "/api/apply-status":\n            query = parse_qs(urlparse(self.path).query)\n            job_id = str((query.get("id") or [""])[0])\n            return self.sendj(apply_job_status(job_id))\n        if path == "/api/state":\n            state = internal_state()\n''',
+              'apply status endpoint',
+          )
+
+          replace_once(
+              '''                state = {"nodes": current["nodes"], "routing": routing, "iwan": iwan}\n                apply_config(state)\n                save_state(state)\n                return self.sendj({"ok": True, "message": "已生效"})\n''',
+              '''                state = {"nodes": current["nodes"], "routing": routing, "iwan": iwan}\n                job_id = start_async_apply(state, current, str(payload.get("request_id") or ""))\n                return self.sendj(\n                    {\n                        "ok": True,\n                        "accepted": True,\n                        "job_id": job_id,\n                        "message": "配置已保存，正在重载",\n                    },\n                    202,\n                )\n''',
+              'apply endpoint',
+          )
+
+          app_path.write_text(text, encoding='utf-8')
+
+          js_path = Path('app/static/app.js')
+          js = js_path.read_text(encoding='utf-8')
+          old_js = '''async function applyAll() {\n  document.querySelectorAll('[data-route]').forEach(element => {\n    S.routing[element.dataset.route] = element.value;\n  });\n  S.iwan = {\n    enabled: $('ie').checked,\n    listen: $('il').value.trim(),\n    port: Number($('ip').value),\n    pool: $('ipool').value.trim(),\n    mtu: Number($('imtu').value),\n    username: $('iu').value.trim(),\n    password: $('iwp').value\n  };\n\n  const button = $('apply');\n  button.disabled = true;\n  button.textContent = '应用中…';\n  $('msg').textContent = '正在检查配置并快速重载';\n  try {\n    await api('/api/apply', {\n      method: 'POST',\n      body: JSON.stringify({ routing: S.routing, iwan: S.iwan })\n    });\n    $('msg').textContent = '✓ 已生效';\n    await load();\n  } catch (error) {\n    $('msg').textContent = `失败：${error.message}`;\n  } finally {\n    setTimeout(() => {\n      button.disabled = false;\n      button.textContent = '应用配置';\n    }, 900);\n  }\n}\n'''
+          new_js = '''const pause = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));\n\nfunction isNetworkError(error) {\n  return error instanceof TypeError || /Load failed|Failed to fetch|NetworkError|网络/.test(String(error?.message || error));\n}\n\nasync function waitForApply(requestId) {\n  const deadline = Date.now() + 35000;\n  while (Date.now() < deadline) {\n    await pause(1000);\n    try {\n      const status = await api(`/api/apply-status?id=${encodeURIComponent(requestId)}`);\n      if (status.state === 'success') {\n        $('msg').textContent = '✓ 已生效';\n        await load();\n        return;\n      }\n      if (status.state === 'error') {\n        throw new Error(status.error || status.message || '配置应用失败');\n      }\n      $('msg').textContent = status.state === 'reloading'\n        ? '配置已保存，正在重载并等待 iWAN 重连…'\n        : '正在检查配置…';\n    } catch (error) {\n      if (!isNetworkError(error)) throw error;\n      $('msg').textContent = 'iWAN 正在重新连接，请稍候…';\n    }\n  }\n  throw new Error('等待 iWAN 重连超时，请刷新页面确认');\n}\n\nasync function applyAll() {\n  document.querySelectorAll('[data-route]').forEach(element => {\n    S.routing[element.dataset.route] = element.value;\n  });\n  S.iwan = {\n    enabled: $('ie').checked,\n    listen: $('il').value.trim(),\n    port: Number($('ip').value),\n    pool: $('ipool').value.trim(),\n    mtu: Number($('imtu').value),\n    username: $('iu').value.trim(),\n    password: $('iwp').value\n  };\n\n  const requestId = globalThis.crypto?.randomUUID?.()\n    || `apply-${Date.now()}-${Math.random().toString(16).slice(2)}`;\n  const button = $('apply');\n  button.disabled = true;\n  button.textContent = '应用中…';\n  $('msg').textContent = '正在检查配置';\n  try {\n    const result = await api('/api/apply', {\n      method: 'POST',\n      body: JSON.stringify({ routing: S.routing, iwan: S.iwan, request_id: requestId })\n    });\n    $('msg').textContent = result.message || '配置已保存，正在重载…';\n    await waitForApply(result.job_id || requestId);\n  } catch (error) {\n    if (isNetworkError(error)) {\n      $('msg').textContent = '连接短暂中断，正在确认应用结果…';\n      try {\n        await waitForApply(requestId);\n      } catch (waitError) {\n        $('msg').textContent = `无法确认：${waitError.message}`;\n      }\n    } else {\n      $('msg').textContent = `失败：${error.message}`;\n    }\n  } finally {\n    button.disabled = false;\n    button.textContent = '应用配置';\n  }\n}\n'''
+          if js.count(old_js) != 1:
+              raise SystemExit(f'app.js applyAll: expected one match, got {js.count(old_js)}')
+          js_path.write_text(js.replace(old_js, new_js, 1), encoding='utf-8')
+          PY
+
+      - name: Verify syntax, scope and unchanged routing
+        env:
+          PYTHONPATH: app
+          IWAN_DATA: /tmp/iwan-async-test
+        run: |
+          python3 -m py_compile app/app.py app/importers.py
+          node --check app/static/app.js
+          bash -n install.sh
+          git diff --check
+          test "$(git diff --name-only | sort)" = $'app/app.py\napp/static/app.js'
+          python3 - <<'PY'
+          import app as gateway
+          assert gateway.build.__name__ == 'build'
+          assert gateway.apply_job_status('missing')['state'] == 'unknown'
+          gateway._set_apply_job('test-job', 'reloading', '测试')
+          assert gateway.apply_job_status('test-job')['state'] == 'reloading'
+          source = open('app/app.py', encoding='utf-8').read()
+          assert '{"action": "sniff"}' in source
+          assert '{"rule_set": "geosite-ai", "outbound": routing["ai"]}' in source
+          assert 'rule["ip_cidr"] = TG_CIDR' in source
+          assert '/api/apply-status' in source
+          js = open('app/static/app.js', encoding='utf-8').read()
+          assert 'waitForApply' in js and 'request_id' in js
+          print('async apply checks passed')
+          PY
+
+      - name: Commit fix
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/app.py app/static/app.js
+          git commit -m "fix: return before iWAN reload and confirm asynchronously"
+          git push
