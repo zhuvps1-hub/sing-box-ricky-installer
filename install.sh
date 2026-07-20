@@ -28,17 +28,18 @@ bin=$(find "$tmp" -type f -name sing-box | head -n1)
 [[ -x "$bin" ]] || die "安装包中未找到 sing-box"
 install -m 0755 "$bin" /usr/local/bin/sing-box
 sing-box version | grep -q with_iwan || die "当前核心不包含 with_iwan"
+sing-box version | grep -q with_clash_api || die "当前核心不包含 with_clash_api，无法启用零重载分流"
 
 info "安装 iWAN Gateway"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/app/static" "$APP_DIR/bin" "$DATA_DIR/backups" "$SB_DIR"
-for f in app.py importers.py static/index.html static/style.css static/app.js; do
+for f in app.py importers.py server.py static/index.html static/style.css static/app.js; do
   mkdir -p "$APP_DIR/app/$(dirname "$f")"
   curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/app/${f}" -o "$APP_DIR/app/$f"
 done
 curl -fsSL "https://raw.githubusercontent.com/${REPO}/main/app/systemctl" -o "$APP_DIR/bin/systemctl"
 chmod 0755 "$APP_DIR/bin/systemctl"
-python3 -m py_compile "$APP_DIR/app/app.py" "$APP_DIR/app/importers.py" || die "面板代码检查失败"
+python3 -m py_compile "$APP_DIR/app/app.py" "$APP_DIR/app/importers.py" "$APP_DIR/app/server.py" || die "面板代码检查失败"
 chmod 700 "$DATA_DIR"
 
 cat > /etc/systemd/system/iwan-gateway.service <<EOF
@@ -54,7 +55,7 @@ WorkingDirectory=$APP_DIR/app
 Environment=IWAN_DATA=$DATA_DIR
 Environment=IWAN_PANEL_PORT=$PANEL_PORT
 Environment=PATH=$APP_DIR/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/usr/bin/python3 $APP_DIR/app/app.py
+ExecStart=/usr/bin/python3 $APP_DIR/app/server.py
 Restart=always
 RestartSec=2
 NoNewPrivileges=true
@@ -92,7 +93,9 @@ fi
 chmod 600 "$SB_DIR/config.json"
 sing-box check -c "$SB_DIR/config.json"
 systemctl daemon-reload
-systemctl enable --now sing-box iwan-gateway
+systemctl enable --now sing-box
+IWAN_DATA="$DATA_DIR" IWAN_PANEL_PORT="$PANEL_PORT" /usr/bin/python3 "$APP_DIR/app/server.py" --sync-config
+systemctl enable --now iwan-gateway
 systemctl restart iwan-gateway
 
 if command -v ufw >/dev/null; then ufw allow "$PANEL_PORT/tcp" >/dev/null || true; fi
