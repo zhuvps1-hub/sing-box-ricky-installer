@@ -1,0 +1,493 @@
+name: apply-selector-routing
+
+on:
+  push:
+    paths:
+      - .github/workflows/apply-selector-routing.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Patch panel for selector routing
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          app_path = Path('app/app.py')
+          text = app_path.read_text()
+
+          old = 'import subprocess\nimport tempfile\n'
+          new = 'import subprocess\nimport sys\nimport tempfile\n'
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = 'from urllib.parse import urlparse\n'
+          new = 'from urllib import error as urlerror, request as urlrequest\nfrom urllib.parse import quote, urlparse\n'
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = 'CATS = ["cn", "ai", "google", "youtube", "netflix", "tiktok", "telegram"]\n'
+          new = '''CATS = ["cn", "ai", "google", "youtube", "netflix", "tiktok", "telegram"]
+SELECTOR_KEYS = [*CATS, "default"]
+SELECTOR_TAGS = {key: f"iwan-route-{key}" for key in SELECTOR_KEYS}
+CLASH_API = os.environ.get("IWAN_CLASH_API", "http://127.0.0.1:19090").rstrip("/")
+'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''    tags = {node["tag"] for node in nodes} | {"direct"}
+    for key, value in routing.items():
+        if value not in tags:
+            raise ValueError(f"{LABELS.get(key, '默认出口')}选择的节点不存在")
+
+    outbounds: list[dict] = [{"type": "direct", "tag": "direct"}]
+'''
+          new = '''    tags = {node["tag"] for node in nodes} | {"direct"}
+    collision = {node["tag"] for node in nodes} & set(SELECTOR_TAGS.values())
+    if collision:
+        raise ValueError(f"节点名称与系统分流名称冲突：{', '.join(sorted(collision))}")
+    for key, value in routing.items():
+        if value not in tags:
+            raise ValueError(f"{LABELS.get(key, '默认出口')}选择的节点不存在")
+
+    outbounds: list[dict] = [{"type": "direct", "tag": "direct"}]
+'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''        item["server_port"] = int(node["port"])
+        outbounds.append(item)
+
+    inbounds: list[dict] = []
+'''
+          new = '''        item["server_port"] = int(node["port"])
+        outbounds.append(item)
+
+    selector_members = ["direct", *[node["tag"] for node in nodes]]
+    for key in SELECTOR_KEYS:
+        outbounds.append(
+            {
+                "type": "selector",
+                "tag": SELECTOR_TAGS[key],
+                "outbounds": selector_members,
+                "default": routing[key],
+                "interrupt_exist_connections": False,
+            }
+        )
+
+    inbounds: list[dict] = []
+'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''    rules: list[dict] = [
+        {"action": "sniff"},
+        {"ip_is_private": True, "outbound": "direct"},
+        {"rule_set": ["geosite-cn", "geoip-cn"], "outbound": routing["cn"]},
+        {"rule_set": "geosite-ai", "outbound": routing["ai"]},
+        {"domain_suffix": DOMAINS["ai"], "outbound": routing["ai"]},
+    ]
+    for key in ["youtube", "netflix", "tiktok", "telegram", "google"]:
+        rule: dict = {"domain_suffix": DOMAINS[key], "outbound": routing[key]}
+'''
+          new = '''    rules: list[dict] = [
+        {"action": "sniff"},
+        {"ip_is_private": True, "outbound": "direct"},
+        {"rule_set": ["geosite-cn", "geoip-cn"], "outbound": SELECTOR_TAGS["cn"]},
+        {"rule_set": "geosite-ai", "outbound": SELECTOR_TAGS["ai"]},
+        {"domain_suffix": DOMAINS["ai"], "outbound": SELECTOR_TAGS["ai"]},
+    ]
+    for key in ["youtube", "netflix", "tiktok", "telegram", "google"]:
+        rule: dict = {"domain_suffix": DOMAINS[key], "outbound": SELECTOR_TAGS[key]}
+'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''        "route": {
+            "rule_set": [*CN_RULES, AI_RULE_SET],
+            "rules": rules,
+            "final": routing["default"],
+            "auto_detect_interface": True,
+        },
+    }
+
+
+def apply_config(state: dict) -> None:
+'''
+          new = '''        "route": {
+            "rule_set": [*CN_RULES, AI_RULE_SET],
+            "rules": rules,
+            "final": SELECTOR_TAGS["default"],
+            "auto_detect_interface": True,
+        },
+        "experimental": {
+            "cache_file": {
+                "enabled": True,
+                "path": str(DATA / "selector-cache.db"),
+            },
+            "clash_api": {
+                "external_controller": "127.0.0.1:19090",
+            },
+        },
+    }
+
+
+def clash_request(method: str, path: str, payload: dict | None = None, timeout: float = 2.0) -> dict:
+    data = json.dumps(payload).encode() if payload is not None else None
+    request = urlrequest.Request(
+        CLASH_API + path,
+        data=data,
+        method=method,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urlrequest.urlopen(request, timeout=timeout) as response:
+            body = response.read()
+    except urlerror.HTTPError as exc:
+        detail = exc.read().decode(errors="replace").strip()
+        raise ValueError(detail or f"Clash API 返回 HTTP {exc.code}") from exc
+    except urlerror.URLError as exc:
+        raise ValueError(f"Clash API 不可用：{exc.reason}") from exc
+    if not body:
+        return {}
+    try:
+        value = json.loads(body)
+        return value if isinstance(value, dict) else {}
+    except Exception as exc:
+        raise ValueError("Clash API 返回内容无效") from exc
+
+
+def selector_path(key: str) -> str:
+    return f"/proxies/{quote(SELECTOR_TAGS[key], safe='')}"
+
+
+def switch_routing(previous: dict, desired: dict) -> list[str]:
+    changed: list[str] = []
+    applied: list[tuple[str, str]] = []
+    try:
+        for key in SELECTOR_KEYS:
+            path = selector_path(key)
+            status = clash_request("GET", path)
+            original = str(status.get("now") or previous[key])
+            if original == desired[key]:
+                continue
+            clash_request("PUT", path, {"name": desired[key]})
+            applied.append((key, original))
+            confirmed = clash_request("GET", path)
+            if confirmed.get("now") != desired[key]:
+                raise ValueError(f"{LABELS.get(key, '默认出口')}线路切换未确认")
+            changed.append(key)
+    except Exception:
+        for key, original in reversed(applied):
+            try:
+                clash_request("PUT", selector_path(key), {"name": original})
+            except Exception:
+                pass
+        raise
+    return changed
+
+
+def apply_config(state: dict) -> None:
+'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''            backup = DATA / "backups" / f"config-{int(time.time())}.json"
+            backup.parent.mkdir(exist_ok=True)
+            if SB.exists():
+                backup.write_bytes(SB.read_bytes())
+            os.replace(temporary, SB)
+'''
+          new = '''            os.replace(temporary, SB)
+'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''            if path == "/api/apply":
+                current = internal_state()
+                routing_input = payload.get("routing") if isinstance(payload.get("routing"), dict) else {}
+                routing = normalize_routing(routing_input, {node["tag"] for node in current["nodes"]})
+                iwan_input = payload.get("iwan") if isinstance(payload.get("iwan"), dict) else {}
+                previous_iwan = current["iwan"]
+                iwan = {
+                    "enabled": bool(iwan_input.get("enabled", True)),
+                    "listen": str(iwan_input.get("listen", "::")),
+                    "port": int(iwan_input.get("port", 8000)),
+                    "pool": str(iwan_input.get("pool", "10.10.10.0/24")),
+                    "mtu": int(iwan_input.get("mtu", 1400)),
+                    "username": str(iwan_input.get("username", "")),
+                    "password": str(iwan_input.get("password", "")) or previous_iwan.get("password", ""),
+                }
+                if not 1 <= iwan["port"] <= 65535:
+                    raise ValueError("iWAN 端口无效")
+                if not 576 <= iwan["mtu"] <= 9000:
+                    raise ValueError("MTU 必须在 576–9000 之间")
+                state = {"nodes": current["nodes"], "routing": routing, "iwan": iwan}
+                apply_config(state)
+                save_state(state)
+                return self.sendj({"ok": True, "message": "已生效"})
+'''
+          new = '''            if path == "/api/apply":
+                current = internal_state()
+                tags = {node["tag"] for node in current["nodes"]}
+                previous_routing = normalize_routing(current["routing"], tags)
+                routing_input = payload.get("routing") if isinstance(payload.get("routing"), dict) else {}
+                routing = normalize_routing(routing_input, tags)
+                iwan_input = payload.get("iwan") if isinstance(payload.get("iwan"), dict) else {}
+                previous_iwan = current["iwan"]
+                iwan = {
+                    "enabled": bool(iwan_input.get("enabled", True)),
+                    "listen": str(iwan_input.get("listen", "::")),
+                    "port": int(iwan_input.get("port", 8000)),
+                    "pool": str(iwan_input.get("pool", "10.10.10.0/24")),
+                    "mtu": int(iwan_input.get("mtu", 1400)),
+                    "username": str(iwan_input.get("username", "")),
+                    "password": str(iwan_input.get("password", "")) or previous_iwan.get("password", ""),
+                }
+                if not 1 <= iwan["port"] <= 65535:
+                    raise ValueError("iWAN 端口无效")
+                if not 576 <= iwan["mtu"] <= 9000:
+                    raise ValueError("MTU 必须在 576–9000 之间")
+                state = {"nodes": current["nodes"], "routing": routing, "iwan": iwan}
+
+                if iwan == previous_iwan:
+                    try:
+                        changed = switch_routing(previous_routing, routing)
+                    except Exception:
+                        apply_config(state)
+                        save_state(state)
+                        return self.sendj(
+                            {
+                                "ok": True,
+                                "mode": "reload",
+                                "message": "已初始化快速分流并热重载",
+                            }
+                        )
+                    setv("routing", json.dumps(routing, ensure_ascii=False))
+                    if changed:
+                        names = "、".join(LABELS.get(key, "默认出口") for key in changed)
+                        return self.sendj(
+                            {
+                                "ok": True,
+                                "mode": "switch",
+                                "changed": changed,
+                                "message": f"{names}已切换，无需重载",
+                            }
+                        )
+                    return self.sendj({"ok": True, "mode": "unchanged", "message": "配置未变化"})
+
+                apply_config(state)
+                save_state(state)
+                return self.sendj({"ok": True, "mode": "reload", "message": "iWAN 配置已保存并热重载"})
+'''
+          assert old in text
+          text = text.replace(old, new, 1)
+
+          old = '''if __name__ == "__main__":
+    init()
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+'''
+          new = '''if __name__ == "__main__":
+    init()
+    if "--sync-config" in sys.argv:
+        state = internal_state()
+        state["routing"] = normalize_routing(state["routing"], {node["tag"] for node in state["nodes"]})
+        apply_config(state)
+        save_state(state)
+        raise SystemExit(0)
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+'''
+          assert old in text
+          text = text.replace(old, new, 1)
+          app_path.write_text(text)
+
+          js_path = Path('app/static/app.js')
+          js = js_path.read_text()
+          old = '''  $('msg').textContent = '正在检查配置并快速重载';
+  try {
+    await api('/api/apply', {
+      method: 'POST',
+      body: JSON.stringify({ routing: S.routing, iwan: S.iwan })
+    });
+    $('msg').textContent = '✓ 已生效';
+    await load();
+  } catch (error) {
+    $('msg').textContent = `失败：${error.message}`;
+  } finally {
+'''
+          new = '''  $('msg').textContent = '正在应用配置';
+  try {
+    const result = await api('/api/apply', {
+      method: 'POST',
+      body: JSON.stringify({ routing: S.routing, iwan: S.iwan })
+    });
+    $('msg').textContent = `✓ ${result.message || '已生效'}`;
+    if (result.mode === 'reload') {
+      setTimeout(() => load().catch(() => {}), 3800);
+    } else {
+      await load();
+    }
+  } catch (error) {
+    $('msg').textContent = `失败：${error.message}`;
+  } finally {
+'''
+          assert old in js
+          js_path.write_text(js.replace(old, new, 1))
+
+          install_path = Path('install.sh')
+          install = install_path.read_text()
+          old = '''systemctl daemon-reload
+systemctl enable --now sing-box iwan-gateway
+systemctl restart iwan-gateway
+'''
+          new = '''systemctl daemon-reload
+systemctl enable --now sing-box
+IWAN_DATA="$DATA_DIR" IWAN_PANEL_PORT="$PANEL_PORT" /usr/bin/python3 "$APP_DIR/app/app.py" --sync-config
+systemctl enable --now iwan-gateway
+systemctl restart iwan-gateway
+'''
+          assert old in install
+          install_path.write_text(install.replace(old, new, 1))
+          PY
+
+      - name: Check syntax
+        run: |
+          python3 -m py_compile app/app.py app/importers.py
+          bash -n install.sh app/systemctl
+
+      - name: Download Ricky-Hao core
+        run: |
+          VERSION=1.13.13-rickyhao.22
+          ARCHIVE="sing-box-${VERSION}-linux-amd64-musl.tar.gz"
+          curl -fL --retry 3 -o "/tmp/$ARCHIVE" "https://github.com/Ricky-Hao/sing-box/releases/download/v${VERSION}/${ARCHIVE}"
+          mkdir -p /tmp/sb
+          tar -xzf "/tmp/$ARCHIVE" -C /tmp/sb
+          find /tmp/sb -type f -name sing-box -exec cp {} /tmp/sing-box \;
+          chmod +x /tmp/sing-box
+          /tmp/sing-box version | tee /tmp/version.txt
+          grep -q with_iwan /tmp/version.txt
+          grep -q with_clash_api /tmp/version.txt
+
+      - name: Validate generated panel configuration
+        run: |
+          DATA=$(mktemp -d)
+          IWAN_DATA="$DATA" python3 - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          sys.path.insert(0, 'app')
+          import app
+
+          routing = {key: 'direct' for key in app.SELECTOR_KEYS}
+          state = {
+              'nodes': [],
+              'routing': routing,
+              'iwan': {
+                  'enabled': True,
+                  'listen': '127.0.0.1',
+                  'port': 18000,
+                  'pool': '10.10.10.0/24',
+                  'mtu': 1400,
+                  'username': '',
+                  'password': '',
+              },
+          }
+          config = app.build(state)
+          tags = {item['tag'] for item in config['outbounds']}
+          assert set(app.SELECTOR_TAGS.values()) <= tags
+          assert config['route']['final'] == app.SELECTOR_TAGS['default']
+          assert config['route']['rules'][0] == {'action': 'sniff'}
+          assert config['route']['rules'][2]['outbound'] == app.SELECTOR_TAGS['cn']
+          assert config['route']['rules'][3]['outbound'] == app.SELECTOR_TAGS['ai']
+          assert config['experimental']['clash_api']['external_controller'] == '127.0.0.1:19090'
+          assert config['experimental']['cache_file']['enabled'] is True
+          Path('/tmp/panel-selector.json').write_text(json.dumps(config))
+          PY
+          /tmp/sing-box check -c /tmp/panel-selector.json
+
+      - name: Verify live Selector switching through Clash API
+        run: |
+          cat >/tmp/live-selector.json <<'EOF'
+          {
+            "log": {"level": "info"},
+            "inbounds": [],
+            "outbounds": [
+              {"type": "direct", "tag": "direct"},
+              {"type": "block", "tag": "blocked"},
+              {
+                "type": "selector",
+                "tag": "iwan-route-ai",
+                "outbounds": ["direct", "blocked"],
+                "default": "direct",
+                "interrupt_exist_connections": false
+              }
+            ],
+            "route": {"rules": [], "final": "iwan-route-ai"},
+            "experimental": {
+              "cache_file": {"enabled": true, "path": "/tmp/live-selector.db"},
+              "clash_api": {"external_controller": "127.0.0.1:19090"}
+            }
+          }
+          EOF
+          /tmp/sing-box check -c /tmp/live-selector.json
+          /tmp/sing-box run -c /tmp/live-selector.json >/tmp/live-selector.log 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:19090/proxies/iwan-route-ai >/tmp/before.json && break
+            sleep 0.2
+          done
+          python3 - <<'PY'
+          import json
+          before = json.load(open('/tmp/before.json'))
+          assert before['now'] == 'direct', before
+          PY
+          curl -fsS -X PUT -H 'Content-Type: application/json' -d '{"name":"blocked"}' http://127.0.0.1:19090/proxies/iwan-route-ai
+          curl -fsS http://127.0.0.1:19090/proxies/iwan-route-ai >/tmp/after.json
+          python3 - <<'PY'
+          import json
+          after = json.load(open('/tmp/after.json'))
+          assert after['now'] == 'blocked', after
+          PY
+
+      - name: Verify panel switch helper
+        run: |
+          IWAN_DATA="$(mktemp -d)" IWAN_CLASH_API="http://127.0.0.1:19090" python3 - <<'PY'
+          import sys
+          sys.path.insert(0, 'app')
+          import app
+
+          previous = {key: 'direct' for key in app.SELECTOR_KEYS}
+          desired = dict(previous)
+          desired['ai'] = 'blocked'
+          changed = app.switch_routing(previous, desired)
+          assert changed == []
+          desired['ai'] = 'direct'
+          changed = app.switch_routing(previous, desired)
+          assert changed == ['ai']
+          PY
+
+      - name: Confirm only intended files changed
+        run: |
+          mapfile -t changed < <(git diff --name-only)
+          printf '%s\n' "${changed[@]}"
+          test "${#changed[@]}" -eq 3
+          printf '%s\n' "${changed[@]}" | grep -qx app/app.py
+          printf '%s\n' "${changed[@]}" | grep -qx app/static/app.js
+          printf '%s\n' "${changed[@]}" | grep -qx install.sh
+
+      - name: Commit verified implementation
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add app/app.py app/static/app.js install.sh
+          git commit -m "feat: switch routing instantly with selectors"
+          git push
